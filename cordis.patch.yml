@@ -1,0 +1,14 @@
+- insert:
+    - id: preset-ascend
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: ascend
+        name: vLLM Ascend
+        description: GitHub research and source work in a persistent Docker workspace with vllm, vllm-ascend and lsp-cli.
+        order: 20
+        plugins:
+          - id: ascend
+            name: '@delva/dsh-ascend'
+            config:
+              workdir: /workspace
+              maxOutputBytes: 100000

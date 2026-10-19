@@ -1,0 +1,20 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --frozen
+      - run: npm test
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen pytest -q
+      - run: npm pack --dry-run

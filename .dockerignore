@@ -1,0 +1,11 @@
+*
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!scripts/
+!scripts/prepare_workspace.py
+!LICENSE
+**/__pycache__/**
+**/*.pyc

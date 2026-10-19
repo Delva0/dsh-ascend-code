@@ -1,0 +1,39 @@
+{
+  "files": [
+    {
+      "path": "prompts/bash.md",
+      "source": "v5/prompts/bash.md",
+      "repository": "graphub",
+      "commit": "4864bff12ef8a4dc62b419f77cf0d2abafdb579f",
+      "sha256": "7393a541c0ca7e027dece5b04852d9ca61681a83a608bc35a40e5adb2fc0312b"
+    },
+    {
+      "path": "prompts/code-agent-system.md",
+      "source": "v5/prompts/code-agent-system.md",
+      "repository": "graphub",
+      "commit": "4864bff12ef8a4dc62b419f77cf0d2abafdb579f",
+      "sha256": "608cf1af591e44d6c9157f929b78a094be3d0f53ccd0f12701aff1104d1140bf"
+    },
+    {
+      "path": "src/ascend_workspace/vendor/sandbox_worker.py",
+      "source": "gh_puller/sandbox/sandbox_worker.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
+      "sha256": "984328b1f1ecec0036f9253a9d31aa717182cb22d87916a6dea5678c2a991f8e"
+    },
+    {
+      "path": "src/ascend_workspace/vendor/shell_contract.py",
+      "source": "gh_puller/tools/shell_contract.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
+      "sha256": "8be48b97bbec0ad372bc967958dccd119f8bf1ae869e7981c914fa4ef87e36cf"
+    },
+    {
+      "path": "LICENSE",
+      "source": "LICENSE",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
+      "sha256": "1ce330de1e283f7e6b39f0250ada9ff5262fe6a1515cc66edde84d82e035c1b3"
+    }
+  ]
+}

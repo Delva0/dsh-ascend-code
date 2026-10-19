@@ -1,0 +1,30 @@
+[project]
+name = "dsh-ascend-workspace"
+version = "0.1.0"
+description = "Persistent Docker workspace tools for the dsh Ascend preset"
+requires-python = ">=3.13,<3.15"
+dependencies = []
+
+[project.optional-dependencies]
+workspace = ["lsp-cli @ https://github.com/Delva0/lsp-cli/releases/download/v0.18.18/lsp_cli-0.18.18-py3-none-any.whl"]
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "pytest-asyncio>=1,<2", "ruff>=0.14,<1"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+exclude = ["src/ascend_workspace/vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
