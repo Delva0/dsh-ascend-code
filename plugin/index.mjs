@@ -9,17 +9,17 @@ import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import {scrubbedParentEnv} from '@deepseek-ai/dsh-subprocess';
 import {PERSONA_PREFIX_SECTION} from '@deepseek-ai/dsh-system-prompt';
 import {validateJsonSchemaValue} from '@deepseek-ai/dsh-tools';
-import * as mcp from '@deepseek-ai/dsh-mcp-client';
 import {Docker} from './docker.mjs';
 import {ensureWorkspace} from './provision.mjs';
+import {registerGitHub} from './github.mjs';
 
 export const name = 'dsh-ascend';
-export const inject = ['tools', 'systemPrompt'];
+export const inject = ['tools', 'systemPrompt', 'subprocess'];
 export const Config = z.object({
   container: z.string(),
   volume: z.string(),
   image: z.string(),
-  githubCommand: z.string(),
+  githubPython: z.string(),
   githubBackend: z.union(['rest', 'graphql', 'dsl']),
   workdir: z.string().default('/workspace'),
   maxOutputBytes: z.number().default(100000),
@@ -58,7 +58,9 @@ export async function apply(ctx, config) {
   config = {...config, container, volume: config.volume || process.env.DSH_ASCEND_VOLUME
     || (container === saved.container ? saved.volume : undefined),
     image: config.image || saved.image,
-    githubCommand: config.githubCommand || process.env.GITHUB_MCP_COMMAND || saved.githubCommand};
+    githubPython: config.githubPython || process.env.DSH_ASCEND_GITHUB_PYTHON};
+  const githubBackend = config.githubBackend || process.env.DSH_ASCEND_GITHUB_BACKEND || 'rest';
+  if (!['rest', 'graphql', 'dsl'].includes(githubBackend)) throw new Error('Invalid GitHub backend');
   if (!config.workdir.startsWith('/') || !Number.isInteger(config.maxOutputBytes)
       || config.maxOutputBytes < 1 || config.maxOutputBytes > 150000) throw new Error('Invalid Ascend configuration');
   const lifetime = new AbortController();
@@ -74,12 +76,7 @@ export async function apply(ctx, config) {
     lifetime.signal.throwIfAborted();
     await docker.connect(lifetime.signal);
     lifetime.signal.throwIfAborted();
-    await mcp.apply(ctx, mcp.Config({serverName: 'ascend_github', transport: 'stdio',
-      command: prepared.githubCommand,
-      args: ['--backend', config.githubBackend || process.env.GITHUB_MCP_BACKEND || 'rest'],
-      env: Object.fromEntries(['GH_TOKEN', 'GITHUB_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN']
-        .map(key => [key, process.env[key] || ''])),
-      cwd: process.cwd(), toolCallTimeoutMs: 180000, failOnStartupError: true}));
+    return prepared;
   });
   ready.catch(error => { if (!lifetime.signal.aborted) ctx.logger.warn(`Ascend preparation: ${error.message}`); });
   function waitReady(signal = lifetime.signal) {
@@ -98,12 +95,11 @@ export async function apply(ctx, config) {
     await waitReady(AbortSignal.any([lifetime.signal, ...(context.signal ? [context.signal] : [])]));
     const assembly = await next();
     assembly.contexts = assembly.contexts.filter(item => item.name !== 'working-directory:current');
-    // The first assembly can begin before the MCP handshake registers its schema.
     assembly.tools = ctx.tools.schemas(context.scope);
     return assembly;
   }, {prepend: true});
   ctx.tools.presentAs('native');
-  const allowed = new Set(['bash', 'mcp__ascend_github__github']);
+  const allowed = new Set(['bash', 'github']);
   let masked;
   let unmask = () => {};
   function maskHostTools() {
@@ -119,6 +115,7 @@ export async function apply(ctx, config) {
   }
   ctx.on('tools/change', maskHostTools);
   maskHostTools();
+  registerGitHub(ctx, {backend: githubBackend, ready, signal: lifetime.signal});
 
   const owned = promise => {
     operations.add(promise);

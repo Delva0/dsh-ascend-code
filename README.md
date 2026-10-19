@@ -5,8 +5,8 @@
 - 容器预装 **lsp-cli 0.18.18**、Python 3.13、uv、git、rg、bash。
 - 初始化时克隆 `vllm-project/vllm`、`vllm-project/vllm-ascend`，保留完整历史和 tags。
 - 两份提示词来自 Graphub 的 `v5/prompts`，原文保存在 [prompts](prompts)。仅替换 WORKDIR、仓库路径、输出上限占位符。
-- GitHub 使用独立的私仓 [github-mcp](https://github.com/Delva0/github-mcp)，完整保留 REST / GraphQL / DSL，默认 REST。
-- 仅在此预设中提供 `bash` 和 `mcp__ascend_github__github`。后者是 dsh 的命名空间；MCP server 仍仅暴露 `github`。
+- GitHub 直接注册为 dsh 原生工具，完整保留 REST / GraphQL / DSL，默认 REST。Python 核心随插件打包。
+- 仅在此预设中提供两个原生工具：`bash` 和 `github`。
 
 适配并固定 **dsh 0.2.1-rc.2**。本版是 agent 工具环境：dsh 的宿主机文件树、终端面板不映射容器。模型凭据和模型选择沿用 dsh 的设置。
 
@@ -18,20 +18,20 @@
 npm install --global pnpm @deepseek-ai/dsh@0.2.1-rc.2
 gh auth login
 mkdir -p ~/.cache/dsh-ascend
-gh release download v0.1.0 --repo Delva0/dsh-ascend \
-  --pattern delva-dsh-ascend-0.1.0.tgz --dir ~/.cache/dsh-ascend --clobber
-dsh plugin --profile web add "$HOME/.cache/dsh-ascend/delva-dsh-ascend-0.1.0.tgz"
+gh release download v0.2.0 --repo Delva0/dsh-ascend \
+  --pattern delva-dsh-ascend-0.2.0.tgz --dir ~/.cache/dsh-ascend --clobber
+dsh plugin --profile web add "$HOME/.cache/dsh-ascend/delva-dsh-ascend-0.2.0.tgz"
 dsh web
 ```
 
-也可在 dsh 的 Plugins 页面安装下载的 `.tgz`，然后启用这个 bundle。插件包自带容器构建文件和 GitHub MCP wheel，不依赖开发者 checkout。
+也可在 dsh 的 Plugins 页面安装下载的 `.tgz`，然后启用这个 bundle。插件包自带容器构建文件、GitHub Python 核心及锁定的依赖，不依赖其他私仓或开发者 checkout。
 
 加载插件后自动开始首次准备，dsh 界面正常打开：
 
-1. 检查 Docker；核对内置 GitHub MCP v0.1.1 wheel 的 SHA-256，用 uv 安装到 `~/.dsh/ascend/runtimes`。
+1. 检查 Docker；用 uv 按 `uv.lock` 安装原生 GitHub 的 Python 运行环境到 `~/.dsh/ascend/runtimes/github-<源码摘要>`。安装完成才标记就绪，升级源码会自动使用对应的新环境。
 2. 构建 `dsh-ascend:0.1.0` 镜像，创建持久 Docker volume 和容器 `dsh-ascend-workspace`，安装 lsp-cli 及配套工具。
 3. 自动克隆两个上游仓库的完整历史和 tags。宿主有 Git 时复用宿主网络/代理，再将完整 checkout 导入容器卷并清理临时目录；否则由容器克隆。容器克隆中断时最多尝试三次。已有 checkout 和用户修改会保留，不执行 reset/pull。
-4. 连接 GitHub MCP。环境就绪后才允许该预设开始模型请求或执行 bash。
+4. 注册 dsh 原生 `github` 和 `bash` 工具。环境就绪后才允许该预设开始模型请求或执行工具；GitHub worker 在所属会话首次调用时启动。
 
 首次需要下载依赖和两个完整 Git 仓库，耗时取决于网络。初始化日志位于 `${DSH_HOME:-~/.dsh}/ascend/setup-*.log`。关闭 dsh 不会打断已启动的独立准备进程；重新打开时会复用正在准备或已经完成的环境。若安装失败，日志和首条请求的错误会说明原因；修复依赖/网络后重启 dsh 即可重试。
 
@@ -54,10 +54,10 @@ npm run setup
 ```bash
 mkdir -p build
 npm pack --pack-destination build
-dsh plugin --profile web add "$PWD/build/delva-dsh-ascend-0.1.0.tgz"
+dsh plugin --profile web add "$PWD/build/delva-dsh-ascend-0.2.0.tgz"
 ```
 
-只提前准备、不安装插件可用 `npm run setup -- --skip-plugin`。源码 setup 会将连接信息写入 `${DSH_HOME:-~/.dsh}/ascend/workspace.json`；仅包含容器、镜像、volume 和可执行路径，没有 token。运行时数据放在 dsh 数据目录和 Docker volume，安装后无需保留源码 checkout。
+只提前准备、不安装插件可用 `npm run setup -- --skip-plugin`。源码 setup 会将连接信息写入 `${DSH_HOME:-~/.dsh}/ascend/workspace.json`；仅包含容器、镜像和 volume，没有 token 或固定的自动生成运行环境路径。运行时数据放在 dsh 数据目录和 Docker volume，安装后无需保留源码 checkout。
 
 ## 配置
 
@@ -74,17 +74,29 @@ dsh my-web
 npm run setup -- --container my-ascend --volume my-ascend-data
 ```
 
-插件内配置支持 `container`、`volume`、`image`、`workdir`、`maxOutputBytes`、`githubCommand`、`githubBackend`。自动准备使用 `/workspace`；自定义 `workdir` 需要自行提供含两个仓库的镜像/容器。默认内联输出上限为 100000 字节。可通过启动环境覆盖连接与 GitHub 后端：
+插件内配置支持 `container`、`volume`、`image`、`workdir`、`maxOutputBytes`、`githubPython`、`githubBackend`。自动准备使用 `/workspace`；自定义 `workdir` 需要自行提供含两个仓库的镜像/容器。默认内联输出上限为 100000 字节。可通过启动环境覆盖连接与 GitHub 后端：
 
 ```bash
-GITHUB_MCP_BACKEND=graphql dsh web
-GITHUB_MCP_BACKEND=dsl dsh web
+DSH_ASCEND_GITHUB_BACKEND=graphql dsh web
+DSH_ASCEND_GITHUB_BACKEND=dsl dsh web
 DSH_ASCEND_CONTAINER=my-ascend dsh web
 DSH_ASCEND_CONTAINER=my-ascend DSH_ASCEND_VOLUME=my-ascend-data dsh web
-GITHUB_MCP_COMMAND=/absolute/path/to/github-mcp dsh web
+DSH_ASCEND_GITHUB_PYTHON=/absolute/path/to/venv/bin/python dsh web
 ```
 
-插件显式向 GitHub MCP 转发 `GH_TOKEN`、`GITHUB_TOKEN`、`GITHUB_PERSONAL_ACCESS_TOKEN`；未设置时复用 `gh auth login`。这些凭据不传入容器。容器不挂载宿主 home、Docker socket 或项目目录。
+插件通过 dsh 的 subprocess provider 显式向 GitHub worker 转发 `GH_TOKEN`、`GITHUB_TOKEN`、`GITHUB_PERSONAL_ACCESS_TOKEN`；未设置时复用 `gh auth login`。这些凭据不传入容器。容器不挂载宿主 home、Docker socket 或项目目录。
+
+`githubPython` / `DSH_ASCEND_GITHUB_PYTHON` 是可选的开发覆盖项，指定的 Python 必须已安装本项目及 `github` extra；普通安装会自动准备。后端配置使用 `githubBackend` 或 `DSH_ASCEND_GITHUB_BACKEND`，不再读取旧版本的 GitHub 配置环境变量。
+
+## 原生 GitHub 工具
+
+通过 `ctx.tools.register` 注册 `github`，参数、描述和三个后端的处理逻辑沿用原 GitHub 工具。返回值直接是后端的 JSON 数据，进入 dsh 原生工具记录和展示，不额外包装 `content` / `structuredContent`。
+
+- dsh 管理工具调度、调用记录、超时策略和 UI 展示。GitHub 调用显示为 fetch 类工具卡片。
+- JS 适配器通过 `ctx.subprocess` 启动宿主机 Python worker，使用插件内部的 JSON-lines 请求/响应协议。
+- 每个会话有独立 worker、HTTP client、响应缓存和临时证据文件；同一会话的调用可并发，保存的 `result_id` 可在 worker 存续期间继续查询。会话释放、预设卸载或 dsh 退出会关闭 worker 并清理临时文件。
+- 取消调用会通知 Python 停止对应任务，等待停止确认后返回；其他并发调用继续工作。若 worker 无法响应取消，则通过 dsh 终止并回收该进程，使所有受影响调用明确失败，后续调用可重新启动 worker。
+- 批量请求中的无效成员只影响自身；全部失败或顶层输入错误才将整次工具调用标为失败。
 
 ## Bash 与任务生命周期
 
@@ -111,14 +123,14 @@ JSON
 
 ```bash
 npm ci --ignore-scripts
-uv sync --frozen
+uv sync --frozen --extra github
 npm test
-uv run --frozen ruff check .
-uv run --frozen pytest -q
+uv run --frozen --extra github ruff check .
+uv run --frozen --extra github pytest -q
 npm run test:dsh
 npm run test:web
 ```
 
-最后两项要求 Docker/uv 可用，以及 GitHub 凭据已配置。`test:dsh` 加载插件自动准备环境，使用真实 dsh 预设和工具注册表验证：工具隔离与切换、提示词、容器 bash、lsp 源码查询、GitHub API、后台通知及取消。`test:web` 要求先安装本插件包，启动 Web profile，通过认证后的页面和 API 检查预设，随后关闭测试进程；可设置 `DSH_TEST_PROFILE` 测试其他 Web profile。两者均不调用模型。
+最后两项要求 Docker/uv 可用，以及 GitHub 凭据已配置。`test:dsh` 加载插件自动准备环境，使用真实 dsh 预设和工具注册表验证：工具隔离与切换、提示词、容器 bash、lsp 源码查询、原生 GitHub API、后台通知及取消。`test:web` 要求先安装本插件包，启动 Web profile，通过认证后的页面和 API 检查预设，随后关闭测试进程；可设置 `DSH_TEST_PROFILE` 测试其他 Web profile。两者均不调用模型。可分别用 `DSH_ASCEND_GITHUB_BACKEND=graphql npm run test:dsh` 和 `DSH_ASCEND_GITHUB_BACKEND=dsl npm run test:dsh` 验证另外两个后端。
 
-[UPSTREAM.json](UPSTREAM.json) 记录两份提示词、任务监督器及参数辅助代码的来源 commit 和 SHA-256。项目自包含，不依赖本机 Graphub/gh-puller checkout。Python 依赖使用 `uv.lock`，Node 开发依赖使用 `package-lock.json`。
+[UPSTREAM.json](UPSTREAM.json) 记录两份提示词、任务监督器、参数辅助代码及 GitHub 核心的来源 commit、SHA-256 和本地调整。项目自包含，不依赖本机 Graphub/gh-puller checkout。Python 依赖使用 `uv.lock`，Node 开发依赖使用 `package-lock.json`。

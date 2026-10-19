@@ -1,0 +1,70 @@
+{
+  "name": "github",
+  "description": "Read GitHub with the DSL (GraphQL syntax); query is the document text. Use GitHub fields, connections, aliases, fragments and declared variables. Select only evidence needed for the question; independent roots and nested resources can share one query. Example (newest matching issues): {search(query:\"repo:O/R words is:issue sort:created-desc\",type:ISSUE,first:20){issueCount nodes{... on Issue{number title comments(last:1){totalCount nodes{author{login} url}}}}}}. PRs use is:pr and ... on PullRequest. ISSUE_SEMANTIC supports symptom-based Issue search; retain explicit repo/date/state qualifiers. Read pageInfo and use after/before for further pages.\nThe schema adds searchCode/searchCommits(query:,first:,page:){totalCount nodes{...}}, Repository.file(path:,ref:){name text}, and PullRequestChangedFile.patch. On connections, first/last sets page size (1..100); limit is a separate argument (1..2000), e.g. comments(first:100,limit:120){nodes{body}} collects up to 120 comments automatically. schema(fields:[\"repository\"]) discovers root arguments and output types; type:\"Release\" selects another type. Omit fields for compact signatures; select fields for full descriptions. Standard __type/__schema also works. The root field get(request:{path:\"/native/path\",params:{...}}) exposes native transport options. Its return type is the JSON scalar, so select it without subfields. DSL type coverage can differ from the native API; schema(fields:[\"get\"]) explains request options and local projection.\nResults use data/errors/extensions. Document errors prevent execution; execution errors identify paths. Full results are saved: saved(id:\"RESULT_ID\",at:\"/data/path\",fields:[\"title\"]) returns local JSON without a sub-selection. extensions.display supplies executable local reads for truncated displays. A partial page does not establish exhaustive coverage; closed issues or merged PRs alone do not prove release inclusion.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "description": "A DSL query using GraphQL syntax."
+      },
+      "variables": {
+        "type": "object",
+        "description": "Values for variables declared in the query."
+      },
+      "operation_name": {
+        "type": "string",
+        "description": "Operation to execute in a multi-operation document."
+      },
+      "max_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 40000,
+        "default": 16000,
+        "description": "Preview and continuation budget per root (minimum 1024 for recovery metadata); full selected data remains saved."
+      },
+      "refresh": {
+        "type": "boolean",
+        "default": false,
+        "description": "Fetch current data instead of reusing this question's reads."
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "errors": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "extensions": {
+        "type": "object"
+      }
+    },
+    "anyOf": [
+      {
+        "required": [
+          "data"
+        ]
+      },
+      {
+        "required": [
+          "errors"
+        ]
+      }
+    ]
+  }
+}

@@ -21,6 +21,7 @@ const base = join(fixture, 'cordis.yml');
 writeFileSync(base, JSON.stringify([
   {id: 'prompt', name: '@deepseek-ai/dsh-system-prompt'},
   {id: 'tools', name: '@deepseek-ai/dsh-tools'},
+  {id: 'subprocess', name: '@deepseek-ai/dsh-subprocess-local'},
   {id: 'projection', name: '@deepseek-ai/dsh-session-projection'},
   {id: 'registry', name: '@deepseek-ai/dsh-agent-preset-registry', config: {default: 'standard'}},
   {id: 'host', name: mock},
@@ -46,11 +47,11 @@ try {
   await ctx.agentPresets.recompose(agent.ctx, 'ascend');
   const prompt = renderPrompt(await ctx.systemPrompt.assemble({scope: agent}));
   console.log('Prepared Ascend workspace and assembled its prompt');
-  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'mcp__ascend_github__github']);
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github']);
   ctx.tools.register({name: 'late_host_tool', description: 'Must stay on the host preset',
     parameters: {type: 'object', properties: {}}, output: {schema: {}, render: () => []},
     execute: async () => ({host: true})});
-  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'mcp__ascend_github__github']);
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github']);
   assert.equal((await call('late_host_tool', {})).isError, true);
   assert.equal(ctx.tools.get('bash', agent).description, readFileSync('prompts/bash.md', 'utf8'));
   assert.equal(ctx.tools.get('bash').description, 'Host fixture');
@@ -64,10 +65,39 @@ try {
   assert.equal(value(await call('bash', {command: 'pwd'})).output.trim(), '/workspace');
   assert.equal((await call('bash', {command: 'true', workdir: '/'})).isError, true);
   assert.equal((await call('bash', {command: 'exit 7'})).isError, true);
-  const github = value(await call('mcp__ascend_github__github', {
+  const backend = process.env.DSH_ASCEND_GITHUB_BACKEND || 'rest';
+  const githubArgs = backend === 'rest' ? {
     requests: [{path: '/repos/vllm-project/vllm-ascend', fields: {name: '/full_name'}}],
-  }));
-  assert.equal(github.structuredContent.results[0].data.name, 'vllm-project/vllm-ascend');
+  } : backend === 'graphql' ? {
+    requests: [{query: '{repository(owner:"vllm-project", name:"vllm-ascend") {nameWithOwner}}'}],
+  } : {query: '{repository(owner:"vllm-project", name:"vllm-ascend") {nameWithOwner}}'};
+  const github = value(await call('github', githubArgs));
+  assert.match(JSON.stringify(github), /vllm-project\/vllm-ascend/);
+  assert(!('structuredContent' in github), 'Native tool must return its canonical backend value');
+  assert.equal(ctx.tools.get('github', agent).presentCall(githubArgs).kind, 'fetch');
+  assert.equal((await call('github', {})).isError, true);
+  if (backend === 'rest') {
+    const saved = {requests: [{result_id: github.results[0].result_id, fields: {name: '/full_name'}}]};
+    assert.equal(value(await call('github', saved)).results[0].data.name, 'vllm-project/vllm-ascend');
+    const partial = value(await call('github', {requests: [17, ...saved.requests]}));
+    assert(partial.results[0].error);
+    assert.equal(partial.results[1].data.name, 'vllm-project/vllm-ascend');
+    assert.equal((await call('github', {requests: [17]})).isError, true);
+    const other = {id: randomUUID(), steer() {}};
+    const otherScope = createScope(ctx, other);
+    other.ctx = otherScope.ctx;
+    try {
+      await ctx.agentPresets.mount(other.ctx, 'ascend');
+      const foreign = await ctx.tools.execute({agent: other, callId: randomUUID(), name: 'github',
+        arguments: saved, signal: new AbortController().signal});
+      assert.equal(foreign.isError, true, 'GitHub evidence must stay in its owning session');
+      assert.match(JSON.stringify(foreign.content), /Unknown result_id/);
+    } finally {
+      await ctx.parallel('agent/disposed', {agent: other});
+      await otherScope.dispose();
+    }
+    assert.equal(value(await call('github', saved)).results[0].data.name, 'vllm-project/vllm-ascend');
+  }
   const background = value(await call('bash', {command: 'sleep 0.4; printf background-ok', run_in_background: true}));
   assert(background.task_id);
   for (let i = 0; i < 100 && !notices.length; i++) await delay(100);
@@ -83,8 +113,8 @@ try {
   value(await call('bash', {command: `test ! -e ${marker}`}));
   await ctx.agentPresets.recompose(agent.ctx, 'standard');
   assert.equal(value(await call('bash', {})).content, 'host');
-  assert(!ctx.tools.schemas(agent).some(t => t.name === 'mcp__ascend_github__github'));
-  console.log('PASS: native bash, prompt, preset isolation/switch, real Docker/lsp/GitHub, background notification, cancellation');
+  assert(!ctx.tools.schemas(agent).some(t => t.name === 'github'));
+  console.log(`PASS: native bash/GitHub (${backend}), prompt, preset isolation/switch, real Docker/lsp, background notification, cancellation`);
 } finally {
   await scope.dispose();
   await ctx.fiber.dispose();

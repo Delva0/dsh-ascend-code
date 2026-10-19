@@ -1,8 +1,8 @@
 {
   "name": "@delva/dsh-ascend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "vLLM Ascend agent preset with GitHub MCP and a persistent Docker workspace",
+  "description": "vLLM Ascend agent preset with native GitHub tools and a persistent Docker workspace",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -29,8 +29,10 @@
     ".dockerignore",
     "pyproject.toml",
     "uv.lock",
+    "scripts/prepare_workspace.py",
     "src/**/*.py",
-    "scripts/prepare_workspace.py"
+    "src/**/*.json",
+    "src/**/*.graphql"
   ],
   "dsh": {
     "bundle": {
@@ -46,7 +48,6 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-mcp-client": "0.2.1-rc.2",
     "@deepseek-ai/dsh-subprocess": "0.2.1-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
@@ -57,6 +58,7 @@
     "@deepseek-ai/dsh-agent-preset": "^0.2.1-rc.2",
     "@deepseek-ai/dsh-agent-preset-registry": "^0.2.1-rc.2",
     "@deepseek-ai/dsh-app-boot": "^0.2.1-rc.2",
-    "@deepseek-ai/dsh-session-projection": "^0.2.1-rc.2"
+    "@deepseek-ai/dsh-session-projection": "^0.2.1-rc.2",
+    "@deepseek-ai/dsh-subprocess-local": "0.2.1-rc.2"
   }
 }

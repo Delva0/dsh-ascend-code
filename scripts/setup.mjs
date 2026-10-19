@@ -8,6 +8,7 @@ import {join, resolve} from 'node:path';
 import {ensureWorkspace} from '../plugin/provision.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const {version} = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
   const index = args.indexOf(name);
@@ -34,14 +35,15 @@ const settings = await ensureWorkspace({container, volume: flag('--volume', cont
   image: flag('--image', 'dsh-ascend:0.1.0')});
 const settingsDir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'ascend');
 mkdirSync(settingsDir, {recursive: true});
-writeFileSync(join(settingsDir, 'workspace.json'), JSON.stringify(settings, null, 2) + '\n');
+const {container: savedContainer, volume, image} = settings;
+writeFileSync(join(settingsDir, 'workspace.json'), JSON.stringify({container: savedContainer, volume, image}, null, 2) + '\n');
 if (!args.includes('--skip-plugin')) {
   mkdirSync(join(root, 'build'), {recursive: true});
   run(['npm', 'pack', '--pack-destination', 'build']);
-  const content = readFileSync(resolve(root, 'build/delva-dsh-ascend-0.1.0.tgz'));
+  const content = readFileSync(resolve(root, `build/delva-dsh-ascend-${version}.tgz`));
   const digest = createHash('sha256').update(content).digest('hex').slice(0, 12);
   // pnpm caches a local tarball by its path; each development build needs its own path.
-  const archive = resolve(root, `build/delva-dsh-ascend-0.1.0-${digest}.tgz`);
+  const archive = resolve(root, `build/delva-dsh-ascend-${version}-${digest}.tgz`);
   writeFileSync(archive, content);
   run(['dsh', 'plugin', '--profile', profile, 'add', archive]);
 }

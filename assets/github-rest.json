@@ -1,0 +1,265 @@
+{
+  "name": "github",
+  "description": "Read GitHub with REST path, ci_logs, or a saved result_id. Choose one entry per request. Independent requests run concurrently; errors affect only the failed item.\nSearch: /search/issues for issues; /search/pulls for PRs; /search/repositories for repositories; /search/code for default-branch code; /search/commits for commit messages. Repository filters include org:, user:, language:, topic:, stars:. Code search uses legacy REST syntax. Put keywords and filters in params.q, e.g. 'repo:OWNER/REPO timeout'. Use repo:, author:, label:, in:title,body,comments, is:open, created:, updated: as needed. Search returns at most 1,000 hits; narrow the query if necessary.\nSearch is lexical by default: use it for exact versions, errors, identifiers and PRs. Use params.search_type='semantic' for natural-language issue symptoms, conceptual similarity or missing vocabulary; keep scope filters and avoid OR paraphrase lists or quoted free text. For release problems, start with versioned release notes/docs and version search; expand only to fill evidence gaps. Verify version, hardware and configuration in the hits.\nREST supports GET/HEAD with params, accept and headers on any api.github.com path, including /users/*, /user, /orgs/*, /teams/*, /gists, /notifications, /app and /rate_limit. Endpoint permissions still apply. Use native Accept formats for raw files, diffs and patches; text-match fragments may come from comments. Under /repos/OWNER/REPO: /issues/N and /issues/N/comments read conversations; /pulls/N, /pulls/N/files and /pulls/N/comments read PRs; /pulls/N/checks reads the PR and one page each of its head's checks/status, with next requests for further pages. The repository /issues list includes both issues and PRs and uses different filters from search. Find an author's PRs with /search/pulls and author:LOGIN. /contents/PATH or /readme with params.ref reads a revision; /git/trees/REF with recursive=1 lists files; /commits, /compare/BASE...HEAD, /releases and /actions/runs read history, releases and CI. Under /issues/N: /timeline, /parent, /sub_issues, /dependencies/blocked_by and /dependencies/blocking read issue relationships; /issues/N/semantically_similar finds candidate duplicates. Mentions, closed issues and merged PRs do not prove release inclusion; similar issues need verification.\npaginate collects an array with items_pointer, max_pages and max_items. Follow collection.next_request to continue or retry_request for a failed page; partial page retries may repeat items. A budget stop is not completion. ci_logs={owner,repo,run_id} reads unsuccessful jobs' logs; max_jobs/max_pages bound work. Follow returned resume/next requests for remaining jobs or pages.\nResults preserve status, headers and a result_id for the full response. Use fields to select JSON fields, e.g. {'number':'/number','title':'/title'} after json_pointer='/items'. view='full' restores JSON fields; 'text' decodes file/blob content; 'raw' reads original bytes. start_line/max_lines, tail_lines or find with context_lines read numbered excerpts. Use continue_request unchanged for the next local excerpt; pagination.next is a separate API page. A new path fetches current data; result_id reads saved data. Check incomplete_results, truncated, omissions and completion flags. Errors may include recovery_request to inspect saved data without downloading again. External redirect_url can be read with an external HTTP client.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "requests": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "properties": {
+            "result_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Read a saved response instead of making an HTTP request. Accepts local display options only."
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Native headers, e.g. If-None-Match, Range, X-GitHub-Api-Version. Authentication, host, framing and method overrides are host-managed."
+            },
+            "start_line": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Enable numbered text lines, starting at this 1-based line."
+            },
+            "end_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "default": 200
+            },
+            "tail_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "description": "Numbered tail window; incompatible with start_line/end_line."
+            },
+            "context_lines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 3,
+              "description": "Enable numbered lines around the first literal find match. Use raw text, view=text for base64 files, or a JSON string pointer."
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Character offset in the displayed representation, valid only for the same result_id, view, json_pointer and fields. Follow continue_request unchanged."
+            },
+            "max_chars": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 40000,
+              "default": 16000,
+              "description": "Local display window size; the saved response remains available through result_id and json_pointer."
+            },
+            "find": {
+              "type": "string",
+              "description": "Find literal text locally: from offset in character views or start_line in numbered views; returns context around the first match. A null match_line/match_offset means no match in that view/range, not an empty resource."
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "GitHub read path or api.github.com URL, including its query string. Also accepts GitHub blob/raw code URLs with #L10-L30 line anchors. Always makes a fresh request."
+            },
+            "paginate": {
+              "type": "object",
+              "properties": {
+                "items_pointer": {
+                  "type": "string",
+                  "description": "JSON Pointer to the array to collect; '' for a root array."
+                },
+                "max_pages": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                },
+                "max_items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2000
+                },
+                "page_result_id": {
+                  "type": "string",
+                  "description": "Saved first page from next_request; avoids re-fetching it."
+                },
+                "start_index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0,
+                  "description": "Index within the first page's array, as returned in next_request."
+                }
+              },
+              "required": [
+                "items_pointer",
+                "max_pages",
+                "max_items"
+              ],
+              "additionalProperties": false
+            },
+            "ci_logs": {
+              "type": "object",
+              "properties": {
+                "owner": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]+$"
+                },
+                "repo": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]+$"
+                },
+                "run_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "job_ids": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "description": "Optional known jobs, e.g. remaining_job_ids; skips listing the run's jobs."
+                },
+                "max_pages": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "default": 5
+                },
+                "max_jobs": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50,
+                  "default": 10
+                },
+                "tail_lines": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "default": 200
+                },
+                "max_chars_per_job": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 40000,
+                  "default": 8000
+                }
+              },
+              "required": [
+                "owner",
+                "repo",
+                "run_id"
+              ],
+              "additionalProperties": false
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "HEAD"
+              ],
+              "default": "GET"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              },
+              "description": "Query parameters, e.g. {'q':'repo:OWNER/REPO timeout'}. Arrays repeat the exact key: use {'repository_ids[]': [1, 2]} when required by the endpoint. These values replace matching keys already in path; null encodes an empty value."
+            },
+            "accept": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Native Accept header, e.g. application/vnd.github.text-match+json, application/vnd.github.raw+json, application/vnd.github.diff, application/octet-stream. Defaults to application/vnd.github+json."
+            },
+            "view": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "full",
+                "text",
+                "raw"
+              ],
+              "description": "Local display only. Defaults to text for base64 files/blobs, compact otherwise. compact preserves strings; repeated identity/link fields may be omitted with explicit omissions. It trims protocol metadata. full preserves every field and all metadata; text decodes base64 file/blob content; raw shows original response bytes as UTF-8 or base64. Does not change the HTTP request."
+            },
+            "json_pointer": {
+              "type": "string",
+              "description": "Select a field in the original JSON before display using RFC 6901, e.g. /items/0/body or /head. Empty means the whole response; omitted with search, collection or relation fields defaults to /items."
+            },
+            "fields": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Local projection after json_pointer: output-name -> relative JSON Pointer, e.g. {'title':'/title','author':'/user/login'}. Applies to each array item or one object. Missing values are omitted and reported, not fabricated."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "path"
+              ]
+            },
+            {
+              "required": [
+                "ci_logs"
+              ]
+            },
+            {
+              "required": [
+                "result_id"
+              ]
+            }
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "requests"
+    ],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": [
+      "results"
+    ]
+  }
+}

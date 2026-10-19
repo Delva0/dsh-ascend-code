@@ -1,6 +1,6 @@
 /** Automatic, idempotent preparation shared by the plugin and optional setup CLI. */
 import {spawn, spawnSync} from 'node:child_process';
-import {closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync,
+import {closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync,
   statSync, writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {createHash, randomUUID} from 'node:crypto';
@@ -14,7 +14,17 @@ const preparations = new Map();
 const stateHome = () => join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'ascend');
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 const connectionSettings = options => ({container: options.container, volume: options.volume,
-  image: options.image, githubCommand: options.githubCommand});
+  image: options.image, githubPython: options.githubPython});
+function githubRuntime(directory) {
+  const hash = createHash('sha256');
+  for (const path of ['pyproject.toml', 'uv.lock', ...readdirSync(join(root, 'src/ascend_github'), {recursive: true})
+    .filter(path => /\.(py|json|graphql)$/.test(path)).sort().map(path => `src/ascend_github/${path}`)]) {
+    hash.update(path).update(readFileSync(join(root, path)));
+  }
+  return join(directory, 'runtimes', `github-${hash.digest('hex').slice(0, 16)}`);
+}
+const githubPrepared = options => existsSync(options.githubPython)
+  && (!options.provisionGithub || existsSync(options.githubReady));
 function save(path, value) {
   const pending = `${path}.${process.pid}.tmp`;
   writeFileSync(pending, JSON.stringify(value, null, 2) + '\n', {mode: 0o600});
@@ -27,16 +37,18 @@ function alive(pid) {
 
 export function ensureWorkspace(config = {}, report = console.error, signal) {
   const directory = stateHome();
+  const runtime = githubRuntime(directory);
   const options = {container: config.container || 'dsh-ascend-workspace',
     volume: config.volume || config.container || 'dsh-ascend-workspace',
     image: config.image || 'dsh-ascend:0.1.0', workdir: config.workdir || '/workspace',
-    githubCommand: config.githubCommand || join(directory, 'runtimes/github-mcp-0.1.1/bin/github-mcp'),
-    provisionGithub: !config.githubCommand};
+    githubPython: config.githubPython || join(runtime, 'bin/python'),
+    githubReady: join(runtime, '.ready'),
+    provisionGithub: !config.githubPython};
   const key = createHash('sha256').update(JSON.stringify({directory, ...options,
     dockerHost: process.env.DOCKER_HOST, dockerContext: process.env.DOCKER_CONTEXT})).digest('hex');
   if (preparations.has(key)) return preparations.get(key);
   const preparation = (async () => {
-    if (existsSync(options.githubCommand)) {
+    if (githubPrepared(options)) {
       try {
         await new Docker(options, process.env).connect(signal);
         return connectionSettings(options);
@@ -76,9 +88,9 @@ export function ensureWorkspace(config = {}, report = console.error, signal) {
   return preparation;
 }
 
-function run(argv, {capture = false, allowFailure = false, input} = {}) {
+function run(argv, {capture = false, allowFailure = false, input, env} = {}) {
   const result = spawnSync(argv[0], argv.slice(1), {cwd: root, encoding: 'utf8',
-    input, maxBuffer: 8 * 1024 * 1024,
+    input, env: {...process.env, ...env}, maxBuffer: 8 * 1024 * 1024,
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : [input ? 'pipe' : 'ignore', 'inherit', 'inherit']});
   if (!allowFailure && (result.error || result.status !== 0)) {
     throw new Error(result.error?.message || result.stderr || `${argv[0]} exited ${result.status}`);
@@ -146,7 +158,7 @@ async function provision(options) {
         await delay(500);
       }
     }
-    if (existsSync(options.githubCommand)) {
+    if (githubPrepared(options)) {
       try {
         await new Docker(options, process.env).connect();
         save(options.status, connectionSettings(options));
@@ -155,18 +167,21 @@ async function provision(options) {
     }
     console.log(`\nAscend preparation started at ${new Date().toISOString()}`);
     run(['docker', 'info'], {capture: true});
-    if (!existsSync(options.githubCommand)) {
-      if (!options.provisionGithub) throw new Error(`Configured GitHub MCP does not exist: ${options.githubCommand}`);
+    if (!githubPrepared(options)) {
+      if (!options.provisionGithub) throw new Error(`Configured GitHub Python does not exist: ${options.githubPython}`);
       run(['uv', '--version'], {capture: true});
-      const wheel = join(root, 'assets/github_mcp-0.1.1-py3-none-any.whl');
-      if (createHash('sha256').update(readFileSync(wheel)).digest('hex') !==
-          '192a06ccfe0c98ebd6e543a455af0f0e437b83956224bcf95c86f2be1f247ec1') {
-        throw new Error('Bundled GitHub MCP checksum mismatch');
-      }
-      const environment = resolve(options.githubCommand, '../..');
-      run(['uv', 'venv', '--python', '3.13', '--allow-existing', environment]);
-      run(['uv', 'pip', 'install', '--python', join(environment, 'bin/python'), wheel]);
+      const environment = resolve(options.githubPython, '../..');
+      run(['uv', 'sync', '--project', root, '--python', '3.13', '--frozen', '--extra', 'github',
+        '--no-dev', '--no-editable'], {env: {UV_PROJECT_ENVIRONMENT: environment}});
+      run([options.githubPython, '-I', '-c', 'from ascend_github.worker import BACKENDS; assert len(BACKENDS) == 3']);
+      writeFileSync(options.githubReady, 'ready\n');
     }
+    // A new host GitHub runtime does not require rebuilding a healthy workspace.
+    try {
+      await new Docker(options, process.env).connect();
+      save(options.status, connectionSettings(options));
+      return;
+    } catch { /* Continue with container preparation. */ }
     run(['docker', 'build', '-t', options.image, root]);
     const existing = run(['docker', 'inspect', '--type', 'container', options.container],
       {capture: true, allowFailure: true});

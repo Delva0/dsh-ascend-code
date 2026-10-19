@@ -1,0 +1,200 @@
+{
+  "name": "github",
+  "description": "Read GitHub with GraphQL query, query_from, or a saved result_id. Choose one entry per request. Independent requests run concurrently; errors affect only that item.\nGraphQL can fetch relevant bodies, comments and PR state together across multiple objects.\nSelect fields for what remains to be learned about each object; retain useful detail and conditions. Use aliases to combine objects and fragments for shared selections. Verify version, hardware and configuration in the evidence before applying a finding.\nFor known numbers, put issue/pullRequest aliases inside repository(owner,name). Example: A's description is known and its discussion is needed; B's environment and discussion both need checking. Fetch these together; adapt fields, objects and page sizes. Set query to:\n```graphql\nquery($owner:String!,$repo:String!,$a:Int!,$b:Int!){\n  repository(owner:$owner,name:$repo){\n    a:issue(number:$a){url comments(last:10){...Discussion}}\n    b:issue(number:$b){url body comments(last:10){...Discussion}}\n  }\n}\nfragment Discussion on IssueCommentConnection{\n  totalCount pageInfo{hasPreviousPage startCursor}\n  nodes{url author{login} authorAssociation body}\n}\n```\nSet variables to {\"owner\":\"OWNER\",\"repo\":\"REPO\",\"a\":1,\"b\":2}.\nSearch can also fetch needed evidence together; adapt q, fields and page sizes:\n{\"query\":\"query($q:String!,$after:String){search(query:$q,type:ISSUE,first:10,after:$after){issueCount pageInfo{hasNextPage endCursor} nodes{... on Issue{number url title state body comments(last:10){totalCount pageInfo{hasPreviousPage startCursor} nodes{url author{login} authorAssociation body}}}}}}\",\"variables\":{\"q\":\"repo:OWNER/REPO is:issue TERM\",\"after\":null}}\nRead already fetched fields locally with result_id; query fetches new data or refreshes it. Use result_id with view='full' to inspect the saved JSON structure. If a display window ends before the fields you need, select them directly with json_pointer/fields. To read the saved search's title list:\n{\"result_id\":\"RESULT_ID\",\"json_pointer\":\"/data/search/nodes\",\"fields\":{\"number\":\"/number\",\"title\":\"/title\",\"state\":\"/state\",\"url\":\"/url\"}}\nFor A's saved comments use /data/repository/a/comments. fields maps output names to relative JSON Pointers in each selected array item or object. Local views can only select fields present in the saved response. field_projection omissions are intentional. Use continue_request unchanged for the next local excerpt (no HTTP); offsets do not carry over to a different view/selection.\nFor PR search use is:pr and ... on PullRequest. GraphQL search uses GitHub search qualifiers: ISSUE for exact search, ISSUE_SEMANTIC for meaning (issues only). For semantic search use natural language plus scope filters, avoiding OR paraphrase lists or quoted free text; select issueSearchType/lexicalFallbackReason to check fallback. Search is limited to 1,000 hits. Useful fields: issue.closedByPullRequestsReferences(includeClosedPrs:true), pullRequest.reviewThreads {isResolved isOutdated comments {...}}, repository.discussions, Commit.blame and ProjectsV2. Inspect uncertain fields/args via __type(name:TYPE). Only read-only queries are allowed; check graphql_errors/partial_data even on HTTP 200.\nRead enough evidence for the question; a page or recent-comment sample is not the full result. Select totalCount/issueCount and pageInfo; follow relevant pages and excerpts before drawing conclusions. query_from=RESULT_ID reuses the native query and bindings; variables overrides bindings. Reset cursors when changing filters. paginate collects items_pointer within max_pages/max_items; supply connection_pointer, cursor_variable bound to after, and pageInfo{hasNextPage endCursor}. An unchanged saved page is reused with paginate. collection.next_request continues API pagination, reusing any saved page remainder. Follow it unchanged, or retry_request on failure; partial retries may repeat items. Budget stops are not completion. Nested connections paginate separately; last:N uses before/startCursor to read earlier history.\ncompact preserves every selected JSON field and trims protocol metadata. String values are preserved within max_chars; Check incomplete_results, truncated, omissions and completion flags. text decodes files; raw exposes bytes; line options select numbered excerpts. Errors may supply recovery_request; external redirect_url can use an external HTTP client.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "requests": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "properties": {
+            "result_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Read a saved response instead of making an HTTP request. Accepts local display options only."
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Native headers, e.g. If-None-Match, Range, X-GitHub-Api-Version. Authentication, host, framing and method overrides are host-managed."
+            },
+            "start_line": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Enable numbered text lines, starting at this 1-based line."
+            },
+            "end_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "default": 200
+            },
+            "tail_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "description": "Numbered tail window; incompatible with start_line/end_line."
+            },
+            "context_lines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 3,
+              "description": "Enable numbered lines around the first literal find match. Use raw text, view=text for base64 files, or a JSON string pointer."
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Character offset in the displayed representation, valid only for the same result_id, view, json_pointer and fields. Follow continue_request unchanged."
+            },
+            "max_chars": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 40000,
+              "default": 16000,
+              "description": "Local display window size; the saved response remains available through result_id and json_pointer."
+            },
+            "find": {
+              "type": "string",
+              "description": "Find literal text locally: from offset in character views or start_line in numbered views; returns context around the first match. A null match_line/match_offset means no match in that view/range, not an empty resource."
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "GitHub GraphQL document. Only query operations and fragments are allowed; mutations/subscriptions are rejected before HTTP."
+            },
+            "query_from": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Reuse a saved GraphQL response's exact query, variables, operation and headers. Makes a fresh request unless paginate can reuse that page unchanged. variables overrides selected bindings."
+            },
+            "variables": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "GraphQL variable bindings; with query_from, merge into saved bindings."
+            },
+            "operation_name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "GraphQL operationName; required with multiple queries."
+            },
+            "paginate": {
+              "type": "object",
+              "properties": {
+                "items_pointer": {
+                  "type": "string",
+                  "description": "JSON Pointer to the array to collect; '' for a root array."
+                },
+                "max_pages": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                },
+                "max_items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2000
+                },
+                "connection_pointer": {
+                  "type": "string",
+                  "description": "pointer to the connection containing pageInfo { hasNextPage endCursor }, e.g. /data/repository/issues."
+                },
+                "cursor_variable": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "declared variable used as that connection's after argument."
+                },
+                "page_result_id": {
+                  "type": "string",
+                  "description": "Saved first page from next_request; avoids re-fetching it."
+                },
+                "start_index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0,
+                  "description": "Index within the first page's array, as returned in next_request."
+                }
+              },
+              "required": [
+                "items_pointer",
+                "max_pages",
+                "max_items",
+                "connection_pointer",
+                "cursor_variable"
+              ],
+              "additionalProperties": false
+            },
+            "view": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "full",
+                "text",
+                "raw"
+              ],
+              "description": "Local display only. Defaults to text for base64 files/blobs, compact otherwise. compact preserves GraphQL selections. It trims protocol metadata. full preserves every field and all metadata; text decodes base64 file/blob content; raw shows original response bytes as UTF-8 or base64. Does not change the HTTP request."
+            },
+            "json_pointer": {
+              "type": "string",
+              "description": "Select a field in the original JSON before display using RFC 6901, e.g. /data/search/nodes or /data/repository/a/comments. Empty means the whole response; omitted with collection fields defaults to /items."
+            },
+            "fields": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Local projection after json_pointer: output-name -> relative JSON Pointer, e.g. {'title':'/title','author':'/author/login'}. Applies to each array item or one object. Missing values are omitted and reported, not fabricated."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "query"
+              ]
+            },
+            {
+              "required": [
+                "query_from"
+              ]
+            },
+            {
+              "required": [
+                "result_id"
+              ]
+            }
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "requests"
+    ],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": [
+      "results"
+    ]
+  }
+}
