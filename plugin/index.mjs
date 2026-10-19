@@ -102,7 +102,23 @@ export async function apply(ctx, config) {
     assembly.tools = ctx.tools.schemas(context.scope);
     return assembly;
   }, {prepend: true});
-  ctx.tools.restrict({allow: []});
+  ctx.tools.presentAs('native');
+  const allowed = new Set(['bash', 'mcp__ascend_github__github']);
+  let masked;
+  let unmask = () => {};
+  function maskHostTools() {
+    // Agents inherit this preset's tools too, so allow: [] would also hide our tools.
+    const deny = ctx.tools.schemas().map(tool => tool.name)
+      .filter(tool => !allowed.has(tool) && tool !== 'run_code').sort();
+    const key = JSON.stringify(deny);
+    if (key === masked) return;
+    masked = key;
+    const previous = unmask;
+    unmask = ctx.tools.restrict({deny});
+    previous();
+  }
+  ctx.on('tools/change', maskHostTools);
+  maskHostTools();
 
   const owned = promise => {
     operations.add(promise);

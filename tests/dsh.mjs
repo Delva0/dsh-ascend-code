@@ -47,6 +47,11 @@ try {
   const prompt = renderPrompt(await ctx.systemPrompt.assemble({scope: agent}));
   console.log('Prepared Ascend workspace and assembled its prompt');
   assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'mcp__ascend_github__github']);
+  ctx.tools.register({name: 'late_host_tool', description: 'Must stay on the host preset',
+    parameters: {type: 'object', properties: {}}, output: {schema: {}, render: () => []},
+    execute: async () => ({host: true})});
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'mcp__ascend_github__github']);
+  assert.equal((await call('late_host_tool', {})).isError, true);
   assert.equal(ctx.tools.get('bash', agent).description, readFileSync('prompts/bash.md', 'utf8'));
   assert.equal(ctx.tools.get('bash').description, 'Host fixture');
   assert(prompt.includes('Always use `lsp` to read Python code'));
