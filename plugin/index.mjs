@@ -11,11 +11,14 @@ import {PERSONA_PREFIX_SECTION} from '@deepseek-ai/dsh-system-prompt';
 import {validateJsonSchemaValue} from '@deepseek-ai/dsh-tools';
 import * as mcp from '@deepseek-ai/dsh-mcp-client';
 import {Docker} from './docker.mjs';
+import {ensureWorkspace} from './provision.mjs';
 
 export const name = 'dsh-ascend';
 export const inject = ['tools', 'systemPrompt'];
 export const Config = z.object({
   container: z.string(),
+  volume: z.string(),
+  image: z.string(),
   githubCommand: z.string(),
   githubBackend: z.union(['rest', 'graphql', 'dsl']),
   workdir: z.string().default('/workspace'),
@@ -41,7 +44,7 @@ export function normalizeBash(args) {
 
 export function renderPrompt(info, maximum) {
   const values = {WORKDIR: info.workdir, BASH_MAX_OUTPUT_BYTES: String(maximum),
-    REPOSITORIES: info.repositories.map(repo => `- ${repo.path} (prepared HEAD: ${repo.revision})`).join('\n')};
+    REPOSITORIES: info.repositories.map(repo => `- ${repo.path}`).join('\n')};
   return read('../prompts/code-agent-system.md').replace(/\{\{([A-Z_]+)\}\}/g, (_, key) => {
     if (!(key in values)) throw new Error(`Missing prompt variable ${key}`);
     return values[key];
@@ -51,8 +54,11 @@ export function renderPrompt(info, maximum) {
 export async function apply(ctx, config) {
   const settingsPath = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'ascend', 'workspace.json');
   const saved = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
-  config = {...config, container: config.container || process.env.DSH_ASCEND_CONTAINER || saved.container
-    || 'dsh-ascend-workspace'};
+  const container = config.container || process.env.DSH_ASCEND_CONTAINER || saved.container || 'dsh-ascend-workspace';
+  config = {...config, container, volume: config.volume || process.env.DSH_ASCEND_VOLUME
+    || (container === saved.container ? saved.volume : undefined),
+    image: config.image || saved.image,
+    githubCommand: config.githubCommand || process.env.GITHUB_MCP_COMMAND || saved.githubCommand};
   if (!config.workdir.startsWith('/') || !Number.isInteger(config.maxOutputBytes)
       || config.maxOutputBytes < 1 || config.maxOutputBytes > 150000) throw new Error('Invalid Ascend configuration');
   const lifetime = new AbortController();
@@ -62,23 +68,41 @@ export async function apply(ctx, config) {
     await Promise.allSettled([...operations]);
   });
   const docker = new Docker(config, scrubbedParentEnv());
-  const info = await docker.connect(lifetime.signal);
+  const info = {workdir: config.workdir,
+    repositories: ['vllm', 'vllm-ascend'].map(name => ({path: `${config.workdir}/${name}`}))};
+  const ready = ensureWorkspace(config, message => ctx.logger.info(message), lifetime.signal).then(async prepared => {
+    lifetime.signal.throwIfAborted();
+    await docker.connect(lifetime.signal);
+    lifetime.signal.throwIfAborted();
+    await mcp.apply(ctx, mcp.Config({serverName: 'ascend_github', transport: 'stdio',
+      command: prepared.githubCommand,
+      args: ['--backend', config.githubBackend || process.env.GITHUB_MCP_BACKEND || 'rest'],
+      env: Object.fromEntries(['GH_TOKEN', 'GITHUB_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN']
+        .map(key => [key, process.env[key] || ''])),
+      cwd: process.cwd(), toolCallTimeoutMs: 180000, failOnStartupError: true}));
+  });
+  ready.catch(error => { if (!lifetime.signal.aborted) ctx.logger.warn(`Ascend preparation: ${error.message}`); });
+  function waitReady(signal = lifetime.signal) {
+    return new Promise((resolve, reject) => {
+      signal.throwIfAborted();
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, {once: true});
+      ready.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    });
+  }
   ctx.systemPrompt.section({name: PERSONA_PREFIX_SECTION,
     order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
     text: renderPrompt(info, config.maxOutputBytes), complete: true, interpolate: false});
   ctx.systemPrompt.suppressRuntimeContext();
-  ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+  ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
+    await waitReady(AbortSignal.any([lifetime.signal, ...(context.signal ? [context.signal] : [])]));
     const assembly = await next();
     assembly.contexts = assembly.contexts.filter(item => item.name !== 'working-directory:current');
+    // The first assembly can begin before the MCP handshake registers its schema.
+    assembly.tools = ctx.tools.schemas(context.scope);
     return assembly;
   }, {prepend: true});
   ctx.tools.restrict({allow: []});
-  await mcp.apply(ctx, mcp.Config({serverName: 'ascend_github', transport: 'stdio',
-    command: config.githubCommand || process.env.GITHUB_MCP_COMMAND || saved.githubCommand || 'github-mcp',
-    args: ['--backend', config.githubBackend || process.env.GITHUB_MCP_BACKEND || 'rest'],
-    env: Object.fromEntries(['GH_TOKEN', 'GITHUB_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN']
-      .map(key => [key, process.env[key] || ''])),
-    cwd: process.cwd(), toolCallTimeoutMs: 180000, failOnStartupError: true}));
 
   const owned = promise => {
     operations.add(promise);
@@ -95,6 +119,7 @@ export async function apply(ctx, config) {
     const signal = AbortSignal.any([lifetime.signal, control.signal]);
     watches.set(agent.id, control);
     owned((async () => {
+      await waitReady(signal);
       while (!signal.aborted) {
         try {
           const tasks = await request(agent.id, {action: 'list'}, signal);
@@ -111,7 +136,9 @@ export async function apply(ctx, config) {
         }
         await delay(1000, undefined, {signal}).catch(() => {});
       }
-    })()).finally(() => watches.delete(agent.id));
+    })().catch(error => {
+      if (!signal.aborted) ctx.logger.warn(`Ascend task watcher: ${error.message}`);
+    })).finally(() => watches.delete(agent.id));
   }
   ctx.on('agent/created', ({agent}) => watch(agent));
   ctx.on('agent/disposed', ({agent}) => watches.get(agent.id)?.abort());
@@ -124,6 +151,7 @@ export async function apply(ctx, config) {
     async execute(args, exec) {
       args = normalizeBash(args);
       return owned((async () => {
+        await waitReady(AbortSignal.any([exec.signal, lifetime.signal]));
         const session = exec.agent?.id ?? 'operator';
         const task_id = randomUUID().replaceAll('-', '');
         const signal = AbortSignal.any([exec.signal, lifetime.signal]);

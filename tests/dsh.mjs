@@ -11,7 +11,7 @@ import {renderPrompt} from '@deepseek-ai/dsh-system-prompt';
 mkdirSync('build', {recursive: true});
 const fixture = mkdtempSync(resolve('build/dsh-test-'));
 mkdirSync(join(fixture, 'node_modules/@delva'), {recursive: true});
-symlinkSync(resolve('.'), join(fixture, 'node_modules/@delva/dsh-ascend'), 'dir');
+symlinkSync(process.env.DSH_ASCEND_PLUGIN_ROOT || resolve('.'), join(fixture, 'node_modules/@delva/dsh-ascend'), 'dir');
 const mock = join(fixture, 'host.mjs');
 writeFileSync(mock, `export const inject = ['tools']; export function apply(ctx) {
  ctx.tools.register({name:'bash',description:'Host fixture',parameters:{type:'object',properties:{}},
@@ -44,10 +44,11 @@ try {
   await ctx.agentPresets.mount(agent.ctx, 'standard');
   assert.equal(value(await call('bash', {})).content, 'host');
   await ctx.agentPresets.recompose(agent.ctx, 'ascend');
+  const prompt = renderPrompt(await ctx.systemPrompt.assemble({scope: agent}));
+  console.log('Prepared Ascend workspace and assembled its prompt');
   assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'mcp__ascend_github__github']);
   assert.equal(ctx.tools.get('bash', agent).description, readFileSync('prompts/bash.md', 'utf8'));
   assert.equal(ctx.tools.get('bash').description, 'Host fixture');
-  const prompt = renderPrompt(await ctx.systemPrompt.assemble({scope: agent}));
   assert(prompt.includes('Always use `lsp` to read Python code'));
   assert(prompt.includes('/workspace/vllm-ascend'));
   assert(!prompt.includes('{{WORKDIR}}'));

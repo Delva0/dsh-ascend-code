@@ -4,7 +4,7 @@
 
 - 容器预装 **lsp-cli 0.18.18**、Python 3.13、uv、git、rg、bash。
 - 初始化时克隆 `vllm-project/vllm`、`vllm-project/vllm-ascend`，保留完整历史和 tags。
-- 两份提示词来自 Graphub 的 `v5/prompts`，原文保存在 [prompts](prompts)。仅替换 WORKDIR、仓库路径/准备时 HEAD、输出上限占位符。
+- 两份提示词来自 Graphub 的 `v5/prompts`，原文保存在 [prompts](prompts)。仅替换 WORKDIR、仓库路径、输出上限占位符。
 - GitHub 使用独立的私仓 [github-mcp](https://github.com/Delva0/github-mcp)，完整保留 REST / GraphQL / DSL，默认 REST。
 - 仅在此预设中提供 `bash` 和 `mcp__ascend_github__github`。后者是 dsh 的命名空间；MCP server 仍仅暴露 `github`。
 
@@ -12,46 +12,52 @@
 
 ## 安装
 
-准备 Node.js 24+、[Docker](https://docs.docker.com/get-started/get-docker/)（Linux containers）、[uv](https://docs.astral.sh/uv/getting-started/installation/) 和 [GitHub CLI](https://cli.github.com/)。宿主用户须能直接执行 `docker info`。
+准备 Node.js 24+、[Docker](https://docs.docker.com/get-started/get-docker/)（Linux containers）、[uv](https://docs.astral.sh/uv/getting-started/installation/) 和 [GitHub CLI](https://cli.github.com/)。宿主用户须能直接执行 `docker info`。之后安装 dsh 和插件即可，**无需手动克隆 vllm/vllm-ascend，也无需先运行 setup**。
 
 ```bash
 npm install --global pnpm @deepseek-ai/dsh@0.2.1-rc.2
 gh auth login
-mkdir -p ~/projects
-gh repo clone Delva0/dsh-ascend ~/projects/dsh-ascend
-cd ~/projects/dsh-ascend
-npm run setup
+mkdir -p ~/.cache/dsh-ascend
+gh release download v0.1.0 --repo Delva0/dsh-ascend \
+  --pattern delva-dsh-ascend-0.1.0.tgz --dir ~/.cache/dsh-ascend --clobber
+dsh plugin --profile web add "$HOME/.cache/dsh-ascend/delva-dsh-ascend-0.1.0.tgz"
 dsh web
 ```
 
-首次准备需要下载 Python 依赖和两个完整 Git 仓库，耗时取决于网络。`npm run setup` 会：
+也可在 dsh 的 Plugins 页面安装下载的 `.tgz`，然后启用这个 bundle。插件包自带容器构建文件和 GitHub MCP wheel，不依赖开发者 checkout。
 
-1. 检查依赖和 dsh 版本；未安装 dsh 时安装固定版本。
-2. 从有权限访问的 `Delva0/github-mcp` release 下载 v0.1.1 wheel，核对 SHA-256，安装至本仓 `build/github-mcp` 独立环境。
-3. 构建 `dsh-ascend:0.1.0` 镜像，创建持久 Docker volume 和容器 `dsh-ascend-workspace`。
-4. 克隆两个上游仓库；重复运行保留已有 checkout 和用户修改，不执行 reset/pull。
-5. 将连接信息保存到 `${DSH_HOME:-~/.dsh}/ascend/workspace.json`，将插件包安装进 `web` profile。文件里只有容器名和可执行路径，没有 token。
+加载插件后自动开始首次准备，dsh 界面正常打开：
 
-打开 dsh 后，**新建会话，在第一条消息前选择 `vLLM Ascend`**。该版 dsh 会锁定已开始对话的预设。其他预设的工具环境保持原样。
+1. 检查 Docker；核对内置 GitHub MCP v0.1.1 wheel 的 SHA-256，用 uv 安装到 `~/.dsh/ascend/runtimes`。
+2. 构建 `dsh-ascend:0.1.0` 镜像，创建持久 Docker volume 和容器 `dsh-ascend-workspace`，安装 lsp-cli 及配套工具。
+3. 自动克隆两个上游仓库的完整历史和 tags。宿主有 Git 时复用宿主网络/代理，再将完整 checkout 导入容器卷并清理临时目录；否则由容器克隆。容器克隆中断时最多尝试三次。已有 checkout 和用户修改会保留，不执行 reset/pull。
+4. 连接 GitHub MCP。环境就绪后才允许该预设开始模型请求或执行 bash。
+
+首次需要下载依赖和两个完整 Git 仓库，耗时取决于网络。初始化日志位于 `${DSH_HOME:-~/.dsh}/ascend/setup-*.log`。关闭 dsh 不会打断已启动的独立准备进程；重新打开时会复用正在准备或已经完成的环境。若安装失败，日志和首条请求的错误会说明原因；修复依赖/网络后重启 dsh 即可重试。
+
+打开 dsh 后，**新建会话，在第一条消息前选择 `vLLM Ascend`**。如果仍在初始化，首次请求会等待就绪。该版 dsh 会锁定已开始对话的预设。其他预设的工具环境保持原样。
 
 可以先让 agent 执行 `lsp --version`、`pwd`，再开始代码研究。本预设使用原提示词的静态分析约束；镜像没有安装 CANN/NPU 推理运行环境。
 
-## 插件页面加载
+## 从源码安装或提前准备
 
-也可以先准备环境，再在 dsh 的 Plugins 页面安装本仓对应的 GitHub 包或本地包：
+开发时可从源码安装；`setup` 只是提前准备环境和安装本地包的可选入口：
 
 ```bash
-npm run setup -- --skip-plugin
-npm pack --pack-destination build
+gh repo clone Delva0/dsh-ascend ~/projects/dsh-ascend
+cd ~/projects/dsh-ascend
+npm run setup
 ```
 
-安装本地 `build/delva-dsh-ascend-0.1.0.tgz` 可避免 GUI 的 Git 私仓凭据差异。等价命令：
+只构建插件包、让插件自己准备环境：
 
 ```bash
+mkdir -p build
+npm pack --pack-destination build
 dsh plugin --profile web add "$PWD/build/delva-dsh-ascend-0.1.0.tgz"
 ```
 
-安装后启用插件 bundle 并选择预设。无需把 YAML 手工合并进已有配置。移动/删除本地 checkout 会影响 `build/github-mcp` 路径；移动后重新运行 setup 更新它。
+只提前准备、不安装插件可用 `npm run setup -- --skip-plugin`。源码 setup 会将连接信息写入 `${DSH_HOME:-~/.dsh}/ascend/workspace.json`；仅包含容器、镜像、volume 和可执行路径，没有 token。运行时数据放在 dsh 数据目录和 Docker volume，安装后无需保留源码 checkout。
 
 ## 配置
 
@@ -68,12 +74,13 @@ dsh my-web
 npm run setup -- --container my-ascend --volume my-ascend-data
 ```
 
-插件内配置支持 `container`、`workdir`、`maxOutputBytes`、`githubCommand`、`githubBackend`。`workdir` 默认 `/workspace`，必须包含两个已准备的仓库；默认内联输出上限为 100000 字节。可通过启动环境覆盖连接与 GitHub 后端：
+插件内配置支持 `container`、`volume`、`image`、`workdir`、`maxOutputBytes`、`githubCommand`、`githubBackend`。自动准备使用 `/workspace`；自定义 `workdir` 需要自行提供含两个仓库的镜像/容器。默认内联输出上限为 100000 字节。可通过启动环境覆盖连接与 GitHub 后端：
 
 ```bash
 GITHUB_MCP_BACKEND=graphql dsh web
 GITHUB_MCP_BACKEND=dsl dsh web
 DSH_ASCEND_CONTAINER=my-ascend dsh web
+DSH_ASCEND_CONTAINER=my-ascend DSH_ASCEND_VOLUME=my-ascend-data dsh web
 GITHUB_MCP_COMMAND=/absolute/path/to/github-mcp dsh web
 ```
 
@@ -109,8 +116,9 @@ npm test
 uv run --frozen ruff check .
 uv run --frozen pytest -q
 npm run test:dsh
+npm run test:web
 ```
 
-最后一项要求已运行 setup、Docker 容器可用，以及 GitHub MCP 已配置。它使用真实 dsh 预设和工具注册表验证：工具隔离与切换、提示词、容器 bash、lsp 源码查询、GitHub API、后台通知及取消；不调用模型。
+最后两项要求 Docker/uv 可用，以及 GitHub 凭据已配置。`test:dsh` 加载插件自动准备环境，使用真实 dsh 预设和工具注册表验证：工具隔离与切换、提示词、容器 bash、lsp 源码查询、GitHub API、后台通知及取消。`test:web` 要求先安装本插件包，启动 Web profile，通过认证后的页面和 API 检查预设，随后关闭测试进程；可设置 `DSH_TEST_PROFILE` 测试其他 Web profile。两者均不调用模型。
 
 [UPSTREAM.json](UPSTREAM.json) 记录两份提示词、任务监督器及参数辅助代码的来源 commit 和 SHA-256。项目自包含，不依赖本机 Graphub/gh-puller checkout。Python 依赖使用 `uv.lock`，Node 开发依赖使用 `package-lock.json`。

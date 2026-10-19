@@ -51,6 +51,10 @@ export class Docker {
     if (container.Config.Labels?.['io.delva.dsh-ascend'] !== '0.1.0') {
       throw new Error('Selected container is not a dsh-ascend 0.1.0 workspace. Run npm run setup.');
     }
+    if (this.config.volume && !container.Mounts.some(m =>
+      m.Type === 'volume' && m.Name === this.config.volume && m.Destination === '/workspace')) {
+      throw new Error('Selected container does not mount the configured workspace volume');
+    }
     this.id = container.Id;
     this.image = container.Image;
     if (!container.State.Running) await this.run(['start', this.id], {signal});

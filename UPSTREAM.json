@@ -1,6 +1,13 @@
 {
   "files": [
     {
+      "path": "assets/github_mcp-0.1.1-py3-none-any.whl",
+      "source": "releases/download/v0.1.1/github_mcp-0.1.1-py3-none-any.whl",
+      "repository": "https://github.com/Delva0/github-mcp",
+      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "sha256": "192a06ccfe0c98ebd6e543a455af0f0e437b83956224bcf95c86f2be1f247ec1"
+    },
+    {
       "path": "prompts/bash.md",
       "source": "v5/prompts/bash.md",
       "repository": "graphub",

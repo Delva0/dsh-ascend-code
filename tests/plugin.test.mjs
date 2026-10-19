@@ -7,7 +7,7 @@ test('prompt substitution preserves the complete upstream text and Bash schema',
   const template = readFileSync('prompts/code-agent-system.md', 'utf8');
   const info = {workdir: '/workspace', repositories: [{path: '/workspace/vllm', revision: 'abc'}]};
   assert.equal(renderPrompt(info, 100000), template.replaceAll('{{WORKDIR}}', '/workspace')
-    .replaceAll('{{REPOSITORIES}}', '- /workspace/vllm (prepared HEAD: abc)')
+    .replaceAll('{{REPOSITORIES}}', '- /workspace/vllm')
     .replaceAll('{{BASH_MAX_OUTPUT_BYTES}}', '100000'));
   assert.equal(bashDescription, readFileSync('prompts/bash.md', 'utf8'));
   assert.deepEqual(bashSchema, JSON.parse(readFileSync('assets/bash-schema.json', 'utf8')));

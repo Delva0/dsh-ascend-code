@@ -3,7 +3,9 @@
 import fcntl
 import json
 import os
+import shutil
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -18,10 +20,19 @@ def prepare(root=Path("/workspace")):
             url = f"https://github.com/vllm-project/{name}.git"
             path = root / name
             if not path.exists():
-                pending = root / f".{name}-clone-{os.getpid()}"
                 print(f"Cloning {url} with full history and tags", flush=True)
-                subprocess.run(["git", "clone", url, str(pending)], check=True)
-                pending.rename(path)
+                for attempt in range(3):
+                    pending = root / f".{name}-clone-{os.getpid()}-{attempt}"
+                    try:
+                        subprocess.run(["git", "clone", url, str(pending)], check=True)
+                        pending.rename(path)
+                        break
+                    except subprocess.CalledProcessError:
+                        shutil.rmtree(pending, ignore_errors=True)
+                        if attempt == 2:
+                            raise
+                        print(f"Clone interrupted; retrying {name} ({attempt + 2}/3)", flush=True)
+                        time.sleep(2 ** (attempt + 1))
             actual = subprocess.check_output(
                 ["git", "-C", str(path), "remote", "get-url", "origin"], text=True
             ).strip()

@@ -24,7 +24,13 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "UPSTREAM.json"
+    "UPSTREAM.json",
+    "Dockerfile",
+    ".dockerignore",
+    "pyproject.toml",
+    "uv.lock",
+    "src/**/*.py",
+    "scripts/prepare_workspace.py"
   ],
   "dsh": {
     "bundle": {
@@ -34,6 +40,7 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "test:dsh": "node tests/dsh.mjs",
+    "test:web": "node tests/web.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "peerDependencies": {
