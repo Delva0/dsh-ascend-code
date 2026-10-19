@@ -49,11 +49,11 @@ try {
   await ctx.agentPresets.recompose(agent.ctx, 'ascend');
   const prompt = renderPrompt(await ctx.systemPrompt.assemble({scope: agent}));
   console.log('Prepared Ascend workspace and assembled its prompt');
-  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github', 'web_fetch']);
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github', 'web_fetch', 'web_search']);
   ctx.tools.register({name: 'late_host_tool', description: 'Must stay on the host preset',
     parameters: {type: 'object', properties: {}}, output: {schema: {}, render: () => []},
     execute: async () => ({host: true})});
-  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github', 'web_fetch']);
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github', 'web_fetch', 'web_search']);
   assert.equal((await call('late_host_tool', {})).isError, true);
   assert.equal(ctx.tools.get('bash', agent).description, readFileSync('prompts/bash.md', 'utf8'));
   assert.equal(ctx.tools.get('bash').description, 'Host fixture');
@@ -86,6 +86,20 @@ try {
     start_line: fetched.next_line, max_lines: 3}]})).results[0];
   assert.equal(continued.ref, fetched.ref);
   assert.equal(continued.start_line, fetched.next_line);
+  const searchArgs = {queries: [{query: 'site:github.com/vllm-project/vllm-ascend vllm ascend', max_results: 3}]};
+  assert.equal(ctx.tools.get('web_search', agent).presentCall(searchArgs).kind, 'search');
+  if ((process.env.DSH_ASCEND_WEB_SEARCH_BACKEND || 'brave') === 'brave'
+      && ![process.env.BRAVE_SEARCH_API_KEY, process.env.BRAVE_API_KEY].some(key => key?.trim())) {
+    const missing = await call('web_search', searchArgs);
+    assert.equal(missing.isError, true);
+    assert.match(JSON.stringify(missing.content), /BRAVE_SEARCH_API_KEY/);
+    console.log('PASS: missing Brave credentials are explicit; web_fetch remains available');
+  } else {
+    const searched = value(await call('web_search', searchArgs)).results[0];
+    assert(searched.returned_count > 0, JSON.stringify(searched));
+    assert(searched.items.every(item => /^https?:\/\//.test(item.href)));
+    console.log(`PASS: live native web_search (${searched.backend}) returned ${searched.returned_count} results`);
+  }
   if (backend === 'rest') {
     const saved = {requests: [{result_id: github.results[0].result_id, fields: {name: '/full_name'}}]};
     assert.equal(value(await call('github', saved)).results[0].data.name, 'vllm-project/vllm-ascend');
@@ -125,7 +139,8 @@ try {
   assert.equal(value(await call('bash', {})).content, 'host');
   assert(!ctx.tools.schemas(agent).some(t => t.name === 'github'));
   assert(!ctx.tools.schemas(agent).some(t => t.name === 'web_fetch'));
-  console.log(`PASS: native bash/GitHub (${backend})/web_fetch, prompt, preset isolation/switch, real Docker/lsp, background notification, cancellation`);
+  assert(!ctx.tools.schemas(agent).some(t => t.name === 'web_search'));
+  console.log(`PASS: native bash/GitHub (${backend})/web_fetch/web_search, prompt, preset isolation/switch, real Docker/lsp, background notification, cancellation`);
 } finally {
   await scope.dispose();
   await ctx.fiber.dispose();

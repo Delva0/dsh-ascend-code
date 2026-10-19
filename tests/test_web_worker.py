@@ -6,15 +6,17 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 from PIL import Image
 
 from ascend_github.core.storage import ToolStorage
-from ascend_github.web_worker import FetchSession, definition
+from ascend_github.web_worker import FetchSession, SearchSession, definition, search_options
 
 
-def test_native_schema_matches_original_web_fetch():
-    path = Path(__file__).resolve().parents[1] / "assets/web-fetch.json"
-    assert json.loads(path.read_text()) == definition()
+@pytest.mark.parametrize("name", ["web_fetch", "web_search"])
+def test_native_schema_matches_original_web_tool(name):
+    path = Path(__file__).resolve().parents[1] / f"assets/{name.replace('_', '-')}.json"
+    assert json.loads(path.read_text()) == definition(name)
 
 
 async def test_bridge_refs_survive_model_switches_without_exposing_base64(tmp_path):
@@ -46,3 +48,57 @@ async def test_bridge_refs_survive_model_switches_without_exposing_base64(tmp_pa
         assert len(received) == 1
         assert (await session.invoke(None, "bad", {"requests": [17]}, {}))["failed"]
         assert (await session.invoke(None, "bad-envelope", {}, {}))["failed"]
+
+
+def test_search_credentials_and_v5_defaults(monkeypatch):
+    for name in ("BRAVE_SEARCH_API_KEY", "BRAVE_API_KEY", "DSH_ASCEND_WEB_SEARCH_BACKEND",
+                 "DSH_ASCEND_WEB_SEARCH_CONCURRENCY", "DSH_ASCEND_WEB_SEARCH_INTERVAL"):
+        monkeypatch.delenv(name, raising=False)
+    assert search_options() == {"search_backend": "brave", "search_concurrency": 1,
+                                "search_interval": 2.0, "brave_api_key": ""}
+    monkeypatch.setenv("BRAVE_API_KEY", "alias-key")
+    assert search_options()["brave_api_key"] == "alias-key"
+    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", " primary-key ")
+    assert search_options()["brave_api_key"] == "primary-key"
+    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "  ")
+    assert search_options()["brave_api_key"] == "alias-key"
+    monkeypatch.setenv("DSH_ASCEND_WEB_SEARCH_BACKEND", "duckduckgo")
+    monkeypatch.setenv("DSH_ASCEND_WEB_SEARCH_CONCURRENCY", "3")
+    monkeypatch.setenv("DSH_ASCEND_WEB_SEARCH_INTERVAL", "0.5")
+    assert search_options() == {"search_backend": "duckduckgo", "search_concurrency": 3,
+                                "search_interval": 0.5, "brave_api_key": "alias-key"}
+
+
+@pytest.mark.parametrize(("name", "value"), [("BACKEND", "unknown"), ("CONCURRENCY", "0"),
+    ("CONCURRENCY", "1.5"), ("INTERVAL", "nan"), ("INTERVAL", "inf"), ("INTERVAL", "-1")])
+def test_search_rejects_invalid_settings(monkeypatch, name, value):
+    monkeypatch.setenv("DSH_ASCEND_WEB_SEARCH_" + name, value)
+    with pytest.raises(ValueError):
+        search_options()
+
+
+async def test_search_bridge_preserves_batch_errors_and_cross_call_cooldown(tmp_path):
+    received = []
+
+    async def fetch(request):
+        received.append(request)
+        assert request.headers["X-Subscription-Token"] == "test-secret"
+        if request.url.params["q"] == "limited":
+            return httpx.Response(429, json={"error": {"code": "RATE_LIMITED"}},
+                                  headers={"retry-after": "60"})
+        return httpx.Response(200, json={"type": "search", "web": {"results": [
+            {"title": "Evidence", "url": "https://example.org/doc", "description": "Proof"},
+        ]}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(fetch)) as client:
+        session = SearchSession(client, ToolStorage(tmp_path), search_backend="brave",
+                                brave_api_key="test-secret", search_interval=0)
+        reply = await session.invoke(None, "one", {"queries": [17, {"query": "topic"}]}, {})
+        assert not reply["failed"] and reply["value"]["results"][0]["error"]
+        assert reply["value"]["results"][1]["items"][0]["title"] == "Evidence"
+        assert "test-secret" not in json.dumps(reply)
+        limited = await session.invoke(None, "two", {"queries": [{"query": "limited"}]}, {})
+        assert limited["failed"] and limited["value"]["results"][0]["error"]["status"] == 429
+        cooled = await session.invoke(None, "three", {"queries": [{"query": "later"}]}, {})
+        assert cooled["failed"] and "no request sent" in json.dumps(cooled)
+        assert len(received) == 2

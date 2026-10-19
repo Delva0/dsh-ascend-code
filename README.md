@@ -6,8 +6,8 @@
 - 初始化时克隆 `vllm-project/vllm`、`vllm-project/vllm-ascend`，保留完整历史和 tags。
 - 两份提示词来自 Graphub 的 `v5/prompts`，原文保存在 [prompts](prompts)。仅替换 WORKDIR、仓库路径、输出上限占位符。
 - GitHub 直接注册为 dsh 原生工具，完整保留 REST / GraphQL / DSL，默认 REST。Python 核心随插件打包。
-- 原版 `web_fetch` 一起打包，保留网页、PDF、压缩包、图片、引用续读及批量错误隔离。
-- 仅在此预设中提供三个原生工具：`bash`、`github` 和 `web_fetch`。
+- 原版 `web_search` / `web_fetch` 一起打包，保留 Brave / DuckDuckGo 搜索，以及网页、PDF、压缩包、图片、引用续读及批量错误隔离。
+- 仅在此预设中提供四个原生工具：`bash`、`github`、`web_search` 和 `web_fetch`。
 
 适配并固定 **dsh 0.2.1-rc.2**。本版是 agent 工具环境：dsh 的宿主机文件树、终端面板不映射容器。模型凭据和模型选择沿用 dsh 的设置。
 
@@ -19,20 +19,20 @@
 npm install --global pnpm @deepseek-ai/dsh@0.2.1-rc.2
 gh auth login
 mkdir -p ~/.cache/dsh-ascend
-gh release download v0.3.0 --repo Delva0/dsh-ascend \
-  --pattern delva-dsh-ascend-0.3.0.tgz --dir ~/.cache/dsh-ascend --clobber
-dsh plugin --profile web add "$HOME/.cache/dsh-ascend/delva-dsh-ascend-0.3.0.tgz"
+gh release download v0.4.0 --repo Delva0/dsh-ascend \
+  --pattern delva-dsh-ascend-0.4.0.tgz --dir ~/.cache/dsh-ascend --clobber
+dsh plugin --profile web add "$HOME/.cache/dsh-ascend/delva-dsh-ascend-0.4.0.tgz"
 dsh web
 ```
 
-也可在 dsh 的 Plugins 页面安装下载的 `.tgz`，然后启用这个 bundle。插件包自带容器构建文件、GitHub / web_fetch Python 核心及锁定的依赖，不依赖其他私仓或开发者 checkout。
+也可在 dsh 的 Plugins 页面安装下载的 `.tgz`，然后启用这个 bundle。插件包自带容器构建文件、GitHub / Web Python 核心及锁定的依赖，不依赖其他私仓或开发者 checkout。默认搜索使用 Brave，首次搜索前按下文配置 Brave key；也可选择无需 key 的 DuckDuckGo。
 
 加载插件后自动开始首次准备，dsh 界面正常打开：
 
-1. 检查 Docker；用 uv 按 `uv.lock` 安装 GitHub 和 web_fetch 共用的 Python 运行环境到 `~/.dsh/ascend/runtimes/github-<源码摘要>`。安装完成才标记就绪，升级源码会自动使用对应的新环境。
+1. 检查 Docker；用 uv 按 `uv.lock` 安装 GitHub 和 Web 工具共用的 Python 运行环境到 `~/.dsh/ascend/runtimes/github-<源码摘要>`。安装完成才标记就绪，升级源码会自动使用对应的新环境。
 2. 构建 `dsh-ascend:0.1.0` 镜像，创建持久 Docker volume 和容器 `dsh-ascend-workspace`，安装 lsp-cli 及配套工具。
 3. 自动克隆两个上游仓库的完整历史和 tags。宿主有 Git 时复用宿主网络/代理，再将完整 checkout 导入容器卷并清理临时目录；否则由容器克隆。容器克隆中断时最多尝试三次。已有 checkout 和用户修改会保留，不执行 reset/pull。
-4. 注册 dsh 原生 `github`、`web_fetch` 和 `bash` 工具。环境就绪后才允许该预设开始模型请求或执行工具；GitHub 和 web_fetch 各自在所属会话首次调用时启动独立 worker。
+4. 注册四个 dsh 原生工具。环境就绪后才允许该预设开始模型请求或执行工具；GitHub、web_search、web_fetch 各自在所属会话首次调用时启动独立 worker。
 
 首次需要下载依赖和两个完整 Git 仓库，耗时取决于网络。初始化日志位于 `${DSH_HOME:-~/.dsh}/ascend/setup-*.log`。关闭 dsh 不会打断已启动的独立准备进程；重新打开时会复用正在准备或已经完成的环境。若安装失败，日志和首条请求的错误会说明原因；修复依赖/网络后重启 dsh 即可重试。
 
@@ -55,7 +55,7 @@ npm run setup
 ```bash
 mkdir -p build
 npm pack --pack-destination build
-dsh plugin --profile web add "$PWD/build/delva-dsh-ascend-0.3.0.tgz"
+dsh plugin --profile web add "$PWD/build/delva-dsh-ascend-0.4.0.tgz"
 ```
 
 只提前准备、不安装插件可用 `npm run setup -- --skip-plugin`。源码 setup 会将连接信息写入 `${DSH_HOME:-~/.dsh}/ascend/workspace.json`；仅包含容器、镜像和 volume，没有 token 或固定的自动生成运行环境路径。运行时数据放在 dsh 数据目录和 Docker volume，安装后无需保留源码 checkout。
@@ -75,7 +75,7 @@ dsh my-web
 npm run setup -- --container my-ascend --volume my-ascend-data
 ```
 
-插件内配置支持 `container`、`volume`、`image`、`workdir`、`maxOutputBytes`、`githubPython`、`githubBackend`。自动准备使用 `/workspace`；自定义 `workdir` 需要自行提供含两个仓库的镜像/容器。默认内联输出上限为 100000 字节。可通过启动环境覆盖连接与 GitHub 后端：
+插件内配置支持 `container`、`volume`、`image`、`workdir`、`maxOutputBytes`、`githubPython`、`githubBackend`，以及下文的三项搜索配置。自动准备使用 `/workspace`；自定义 `workdir` 需要自行提供含两个仓库的镜像/容器。默认内联输出上限为 100000 字节。可通过启动环境覆盖连接与 GitHub 后端：
 
 ```bash
 DSH_ASCEND_GITHUB_BACKEND=graphql dsh web
@@ -85,7 +85,7 @@ DSH_ASCEND_CONTAINER=my-ascend DSH_ASCEND_VOLUME=my-ascend-data dsh web
 DSH_ASCEND_GITHUB_PYTHON=/absolute/path/to/venv/bin/python dsh web
 ```
 
-插件通过 dsh 的 subprocess provider 显式向 GitHub worker 转发 `GH_TOKEN`、`GITHUB_TOKEN`、`GITHUB_PERSONAL_ACCESS_TOKEN`；未设置时复用 `gh auth login`。这些凭据不传入 web_fetch worker 或容器。容器不挂载宿主 home、Docker socket 或项目目录。
+插件通过 dsh 的 subprocess provider 显式向 GitHub worker 转发 `GH_TOKEN`、`GITHUB_TOKEN`、`GITHUB_PERSONAL_ACCESS_TOKEN`；未设置时复用 `gh auth login`。这些凭据不传入 Web workers 或容器。容器不挂载宿主 home、Docker socket 或项目目录。
 
 `githubPython` / `DSH_ASCEND_GITHUB_PYTHON` 是可选的开发覆盖项，指定的 Python 必须已安装本项目及 `github` extra；普通安装会自动准备。后端配置使用 `githubBackend` 或 `DSH_ASCEND_GITHUB_BACKEND`，不再读取旧版本的 GitHub 配置环境变量。
 
@@ -99,9 +99,37 @@ DSH_ASCEND_GITHUB_PYTHON=/absolute/path/to/venv/bin/python dsh web
 - 取消调用会通知 Python 停止对应任务，等待停止确认后返回；其他并发调用继续工作。若 worker 无法响应取消，则通过 dsh 终止并回收该进程，使所有受影响调用明确失败，后续调用可重新启动 worker。
 - 批量请求中的无效成员只影响自身；全部失败或顶层输入错误才将整次工具调用标为失败。
 
+## 原生 web_search 工具与 Brave 配置
+
+默认沿用 v5：搜索后端 `brave`，搜索并发 `1`，请求间隔 `2` 秒。工具描述和参数原样注册，保留查询批次、地区、时间范围、页码、结果数、限流冷却和原始错误；所有搜索调用共享所属会话的并发与节流状态。
+
+Brave key 从**启动 dsh 的进程环境**读取，优先 `BRAVE_SEARCH_API_KEY`，兼容 `BRAVE_API_KEY`，取第一个非空值。插件不自动读取旧 Graphub/主仓的 `.env`，也不把 key 写入插件配置或 `workspace.json`。在同一个终端配置后启动：
+
+```bash
+read -rsp 'Brave Search API key: ' BRAVE_SEARCH_API_KEY; printf '\n'
+export BRAVE_SEARCH_API_KEY
+dsh web
+```
+
+更换 key 后重启 dsh。凭据只转发给 web_search worker，并由原实现仅在 Brave API 请求上设置认证头，不传给 GitHub、web_fetch 或容器。选择 Brave 但未配置 key 时，首次搜索明确报错，其他工具照常可用。
+
+| 插件配置项 | 启动环境变量 | 默认值 |
+| --- | --- | --- |
+| `webSearchBackend` | `DSH_ASCEND_WEB_SEARCH_BACKEND` | `brave` |
+| `webSearchConcurrency` | `DSH_ASCEND_WEB_SEARCH_CONCURRENCY` | `1` |
+| `webSearchInterval` | `DSH_ASCEND_WEB_SEARCH_INTERVAL` | `2`（秒） |
+
+显式插件配置优先于环境变量。`webSearchBackend` 支持 `brave`、`duckduckgo`、`auto`；`auto` 在有 key 时选择 Brave，没有 key 时选择 DuckDuckGo。并发必须是正整数，间隔必须是有限的非负数。例如：
+
+```bash
+DSH_ASCEND_WEB_SEARCH_BACKEND=duckduckgo dsh web
+DSH_ASCEND_WEB_SEARCH_BACKEND=auto dsh web
+DSH_ASCEND_WEB_SEARCH_CONCURRENCY=1 DSH_ASCEND_WEB_SEARCH_INTERVAL=2 dsh web
+```
+
 ## 原生 web_fetch 工具
 
-直接注册原版 `web_fetch` 的名称、描述和参数。完整的 `tool_web.py` 随包提供，桥接只暴露其中的 `web_fetch`。
+直接注册原版 `web_fetch` 的名称、描述和参数。完整的 `tool_web.py` 随包提供，原生桥接分别暴露其中的 `web_search` 和 `web_fetch`。
 
 - 保留 HTTP(S) 重定向、HTML 转 Markdown、文本/JSON、PDF 文本提取、ZIP/TAR、gzip/bzip2/xz、图片及其他二进制文件的原始处理行为和限制。
 - `url` 每次重新下载；`ref`、`member`、`start_line`、`max_lines`、`find` 按原契约读取当前会话中保存的内容。GitHub 返回外部 `redirect_url` 时，可直接交给 `web_fetch`。
@@ -110,7 +138,7 @@ DSH_ASCEND_GITHUB_PYTHON=/absolute/path/to/venv/bin/python dsh web
 
 ## 原版来源与版本约定
 
-GitHub 三后端、web_fetch 及共享 Python 核心逐字来自 `gh-puller@c891809229c2b02dfc739cf77175746daba9d379`，保留原始 HTTP User-Agent、工具描述和错误/恢复提示。两份系统/Bash 提示词逐字来自 `graphub@4864bff12ef8a4dc62b419f77cf0d2abafdb579f`；仅在装配时替换原有占位符。
+GitHub 三后端、web_search、web_fetch 及共享 Python 核心逐字来自 `gh-puller@c891809229c2b02dfc739cf77175746daba9d379`，保留原始 HTTP User-Agent、工具描述和错误/恢复提示。两份系统/Bash 提示词逐字来自 `graphub@4864bff12ef8a4dc62b419f77cf0d2abafdb579f`；仅在装配时替换原有占位符。
 
 [UPSTREAM.json](UPSTREAM.json) 逐文件记录来源 commit 和 SHA-256。测试校验每个导入文件的字节摘要，以及导出的工具描述和参数是否与 Python 原定义一致。dsh 适配仅位于 `plugin/` 和 Python worker 入口；后续升级原工具时应整体更新明确的来源版本及校验记录，不能为适配插件而改写原提示词。
 
@@ -147,6 +175,6 @@ npm run test:dsh
 npm run test:web
 ```
 
-最后两项要求 Docker/uv 可用，以及 GitHub 凭据已配置。`test:dsh` 加载插件自动准备环境，使用真实 dsh 预设和工具注册表验证：工具隔离与切换、提示词、容器 bash、lsp 源码查询、原生 GitHub API、web_fetch 下载与续读、后台通知及取消。`test:web` 要求先安装本插件包，启动 Web profile，通过认证后的页面和 API 检查预设，随后关闭测试进程；可设置 `DSH_TEST_PROFILE` 测试其他 Web profile。两者均不调用模型。可分别用 `DSH_ASCEND_GITHUB_BACKEND=graphql npm run test:dsh` 和 `DSH_ASCEND_GITHUB_BACKEND=dsl npm run test:dsh` 验证另外两个后端。
+最后两项要求 Docker/uv 可用，以及 GitHub 凭据已配置。`test:dsh` 加载插件自动准备环境，使用真实 dsh 预设和工具注册表验证：工具隔离与切换、提示词、容器 bash、lsp 源码查询、原生 GitHub API、Web 工具、后台通知及取消。配置了 Brave key 或选择其他搜索后端时实际调用搜索；默认 Brave 且未配置 key 时验证明确的缺少凭据错误。`test:web` 要求先安装本插件包，启动 Web profile，通过认证后的页面和 API 检查预设，随后关闭测试进程；可设置 `DSH_TEST_PROFILE` 测试其他 Web profile。两者均不调用模型。可分别用 `DSH_ASCEND_GITHUB_BACKEND=graphql npm run test:dsh` 和 `DSH_ASCEND_GITHUB_BACKEND=dsl npm run test:dsh` 验证另外两个后端。
 
 项目自包含，不依赖本机 Graphub/gh-puller checkout。Python 依赖使用 `uv.lock`，Node 开发依赖使用 `package-lock.json`。

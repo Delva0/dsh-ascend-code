@@ -1,6 +1,6 @@
 {
   "name": "@delva/dsh-ascend",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "vLLM Ascend agent preset with native GitHub tools and a persistent Docker workspace",
   "type": "module",

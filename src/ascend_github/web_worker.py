@@ -1,7 +1,9 @@
-"""dsh transport for the unchanged upstream web_fetch provider."""
+"""dsh transport for the unchanged upstream web tools."""
 
 import argparse
 import asyncio
+import math
+import os
 from contextlib import suppress
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,14 +12,40 @@ import httpx
 
 from .core.registry import ToolRegistry, installed_specs
 from .core.storage import ToolStorage
-from .core.tool_web import WebTools
+from .core.tool_web import DEFAULT_SEARCH_INTERVAL, SEARCH_BACKENDS, WebTools
 from .worker import invoke, serve_calls
 
 
-def definition():
-    _, spec = next(entry for entry in installed_specs(WebTools) if entry[0] == "web_fetch")
+def definition(name="web_fetch"):
+    _, spec = next(entry for entry in installed_specs(WebTools) if entry[0] == name)
     return {"name": spec.name, "description": spec.description,
             "parameters": spec.parameters, "returns": spec.returns}
+
+
+def search_options():
+    """Read explicitly forwarded host settings; retain the v5 search defaults."""
+    backend = os.environ.get("DSH_ASCEND_WEB_SEARCH_BACKEND", "brave").strip()
+    concurrency = int(os.environ.get("DSH_ASCEND_WEB_SEARCH_CONCURRENCY", "1"))
+    interval = float(os.environ.get("DSH_ASCEND_WEB_SEARCH_INTERVAL", str(DEFAULT_SEARCH_INTERVAL)))
+    if backend not in SEARCH_BACKENDS:
+        raise ValueError("Unknown web search backend")
+    if concurrency < 1 or not math.isfinite(interval) or interval < 0:
+        raise ValueError("Search concurrency must be positive and interval finite and nonnegative")
+    key = next((value for name in ("BRAVE_SEARCH_API_KEY", "BRAVE_API_KEY")
+                if (value := os.environ.get(name, "").strip())), "")
+    return {"search_backend": backend, "search_concurrency": concurrency,
+            "search_interval": interval, "brave_api_key": key}
+
+
+class SearchSession:
+    """One provider owns pacing, concurrency and cooldown across every search call."""
+
+    def __init__(self, client, storage, **options):
+        self.provider = WebTools(client, storage, is_llm_multi_modal=False, **options)
+        self.registry = ToolRegistry(self.provider)
+
+    async def invoke(self, _registry, call_id, arguments, _context):
+        return await invoke(self.registry, call_id, arguments, name="web_search")
 
 
 class FetchSession:
@@ -49,21 +77,23 @@ class FetchSession:
         return {**reply, "image_parts": parts}
 
 
-async def serve():
+async def serve(backend="web_fetch"):
     with TemporaryDirectory(prefix="dsh-ascend-web-") as directory:
-        # An independent unauthenticated client: GitHub credentials never enter
-        # this process, its default headers, or external redirect requests.
+        # Each tool has its own worker/client. Only the search worker receives
+        # Brave credentials; the original provider scopes its auth header to Brave.
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
-            session = FetchSession(client, ToolStorage(Path(directory)))
-            await serve_calls("web_fetch", None, session.invoke)
+            storage = ToolStorage(Path(directory))
+            session = (SearchSession(client, storage, **search_options()) if backend == "web_search"
+                       else FetchSession(client, storage))
+            await serve_calls(backend, None, session.invoke)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Native dsh web_fetch worker")
-    parser.add_argument("--backend", choices=["web_fetch"], default="web_fetch")
-    parser.parse_args()
+    parser = argparse.ArgumentParser(description="Native dsh web tool worker")
+    parser.add_argument("--backend", choices=["web_fetch", "web_search"], default="web_fetch")
+    args = parser.parse_args()
     with suppress(KeyboardInterrupt, BrokenPipeError, asyncio.CancelledError):
-        asyncio.run(serve())
+        asyncio.run(serve(args.backend))
 
 
 if __name__ == "__main__":

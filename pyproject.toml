@@ -1,6 +1,6 @@
 [project]
 name = "dsh-ascend-workspace"
-version = "0.3.0"
+version = "0.4.0"
 description = "Native GitHub and Docker workspace tools for the dsh Ascend preset"
 requires-python = ">=3.13,<3.15"
 dependencies = []
@@ -32,7 +32,8 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
-exclude = ["src/ascend_workspace/vendor", "src/ascend_github/core", "tests/github", "tests/test_web_tools.py"]
+exclude = ["src/ascend_workspace/vendor", "src/ascend_github/core", "tests/github",
+    "tests/test_web_tools.py", "tests/test_web_search.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]

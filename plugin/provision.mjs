@@ -175,7 +175,8 @@ async function provision(options) {
         '--no-dev', '--no-editable'], {env: {UV_PROJECT_ENVIRONMENT: environment}});
       run([options.githubPython, '-I', '-c', 'from ascend_github.worker import BACKENDS; '
         + 'from ascend_github.web_worker import definition; '
-        + 'assert len(BACKENDS) == 3 and definition()["name"] == "web_fetch"']);
+        + 'assert len(BACKENDS) == 3 and definition()["name"] == "web_fetch" '
+        + 'and definition("web_search")["name"] == "web_search"']);
       writeFileSync(options.githubReady, 'ready\n');
     }
     // A new host GitHub runtime does not require rebuilding a healthy workspace.

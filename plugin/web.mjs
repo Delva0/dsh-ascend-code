@@ -1,8 +1,44 @@
-/** Native registration and image transport for the unchanged upstream web_fetch. */
+/** Native registration and image transport for the unchanged upstream web tools. */
 import {readFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {basename} from 'node:path';
 import {createWorkerPool} from './worker.mjs';
+
+export function webSearchEnvironment(config = {}, environment = process.env) {
+  const backend = config.webSearchBackend ?? (environment.DSH_ASCEND_WEB_SEARCH_BACKEND?.trim() || 'brave');
+  const concurrency = Number(config.webSearchConcurrency
+    ?? (environment.DSH_ASCEND_WEB_SEARCH_CONCURRENCY?.trim() || '1'));
+  const interval = Number(config.webSearchInterval
+    ?? (environment.DSH_ASCEND_WEB_SEARCH_INTERVAL?.trim() || '2'));
+  if (!['auto', 'brave', 'duckduckgo'].includes(backend)) throw new Error('Invalid web search backend');
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('Invalid web search concurrency');
+  if (!Number.isFinite(interval) || interval < 0) throw new Error('Invalid web search interval');
+  return {...Object.fromEntries(['BRAVE_SEARCH_API_KEY', 'BRAVE_API_KEY']
+    .filter(key => environment[key]).map(key => [key, environment[key]])),
+    DSH_ASCEND_WEB_SEARCH_BACKEND: backend,
+    DSH_ASCEND_WEB_SEARCH_CONCURRENCY: String(concurrency),
+    DSH_ASCEND_WEB_SEARCH_INTERVAL: String(interval)};
+}
+
+export function registerWebSearch(ctx, {ready, signal, config = {}}) {
+  const spec = JSON.parse(readFileSync(new URL('../assets/web-search.json', import.meta.url), 'utf8'));
+  const run = createWorkerPool(ctx, {backend: 'web_search', ready, signal,
+    module: 'ascend_github.web_worker', label: 'web_search', env: webSearchEnvironment(config)});
+  ctx.tools.register({
+    name: spec.name, description: spec.description, parameters: spec.parameters,
+    isConcurrencySafe: () => true, timeoutMs: 180000,
+    output: {schema: spec.returns, render: (_args, value) => [{type: 'text', text: JSON.stringify(value)}]},
+    presentCall(args) {
+      const queries = Array.isArray(args?.queries) ? args.queries : [];
+      const label = queries.length === 1 ? queries[0]?.query : undefined;
+      return {card: 'generic', kind: 'search', title: label ? `web_search ${label}` : 'web_search',
+        rawInput: queries};
+    },
+    async execute(args, exec) {
+      return (await run(args, exec)).value;
+    },
+  });
+}
 
 export function registerWebFetch(ctx, {ready, signal}) {
   const spec = JSON.parse(readFileSync(new URL('../assets/web-fetch.json', import.meta.url), 'utf8'));

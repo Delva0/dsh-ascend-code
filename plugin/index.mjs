@@ -12,7 +12,7 @@ import {validateJsonSchemaValue} from '@deepseek-ai/dsh-tools';
 import {Docker} from './docker.mjs';
 import {ensureWorkspace} from './provision.mjs';
 import {registerGitHub} from './github.mjs';
-import {registerWebFetch} from './web.mjs';
+import {registerWebFetch, registerWebSearch} from './web.mjs';
 
 export const name = 'dsh-ascend';
 export const inject = ['tools', 'systemPrompt', 'subprocess', 'attachments', 'llm'];
@@ -22,6 +22,9 @@ export const Config = z.object({
   image: z.string(),
   githubPython: z.string(),
   githubBackend: z.union(['rest', 'graphql', 'dsl']),
+  webSearchBackend: z.union(['auto', 'brave', 'duckduckgo']),
+  webSearchConcurrency: z.number(),
+  webSearchInterval: z.number(),
   workdir: z.string().default('/workspace'),
   maxOutputBytes: z.number().default(100000),
 });
@@ -100,7 +103,7 @@ export async function apply(ctx, config) {
     return assembly;
   }, {prepend: true});
   ctx.tools.presentAs('native');
-  const allowed = new Set(['bash', 'github', 'web_fetch']);
+  const allowed = new Set(['bash', 'github', 'web_fetch', 'web_search']);
   let masked;
   let unmask = () => {};
   function maskHostTools() {
@@ -118,6 +121,7 @@ export async function apply(ctx, config) {
   maskHostTools();
   registerGitHub(ctx, {backend: githubBackend, ready, signal: lifetime.signal});
   registerWebFetch(ctx, {ready, signal: lifetime.signal});
+  registerWebSearch(ctx, {ready, signal: lifetime.signal, config});
 
   const owned = promise => {
     operations.add(promise);
