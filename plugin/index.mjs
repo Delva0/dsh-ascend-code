@@ -12,9 +12,10 @@ import {validateJsonSchemaValue} from '@deepseek-ai/dsh-tools';
 import {Docker} from './docker.mjs';
 import {ensureWorkspace} from './provision.mjs';
 import {registerGitHub} from './github.mjs';
+import {registerWebFetch} from './web.mjs';
 
 export const name = 'dsh-ascend';
-export const inject = ['tools', 'systemPrompt', 'subprocess'];
+export const inject = ['tools', 'systemPrompt', 'subprocess', 'attachments', 'llm'];
 export const Config = z.object({
   container: z.string(),
   volume: z.string(),
@@ -99,7 +100,7 @@ export async function apply(ctx, config) {
     return assembly;
   }, {prepend: true});
   ctx.tools.presentAs('native');
-  const allowed = new Set(['bash', 'github']);
+  const allowed = new Set(['bash', 'github', 'web_fetch']);
   let masked;
   let unmask = () => {};
   function maskHostTools() {
@@ -116,6 +117,7 @@ export async function apply(ctx, config) {
   ctx.on('tools/change', maskHostTools);
   maskHostTools();
   registerGitHub(ctx, {backend: githubBackend, ready, signal: lifetime.signal});
+  registerWebFetch(ctx, {ready, signal: lifetime.signal});
 
   const owned = promise => {
     operations.add(promise);

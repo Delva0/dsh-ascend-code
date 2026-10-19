@@ -218,7 +218,7 @@ REST_DESCRIPTION = (
     "A new path fetches current data; result_id reads saved data. "
     "Check incomplete_results, truncated, omissions and completion flags. "
     "Errors may include recovery_request to inspect saved data without downloading again. "
-    "External redirect_url can be read with an external HTTP client."
+    "External redirect_url can be read with web_fetch."
 )
 
 REST_FIELDS = {
@@ -542,7 +542,7 @@ GRAPHQL_DESCRIPTION = (
     "history.\ncompact preserves every selected JSON field and trims protocol metadata. String values are"
     " preserved within max_chars; Check incomplete_results, truncated, omissions and completion flags. "
     "text decodes files; raw exposes bytes; line options select numbered excerpts. Errors may supply "
-    "recovery_request; external redirect_url can use an external HTTP client."
+    "recovery_request; external redirect_url can use web_fetch."
 )
 
 GRAPHQL_FIELDS = {

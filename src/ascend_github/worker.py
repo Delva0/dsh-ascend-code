@@ -49,10 +49,10 @@ def github_token():
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-async def invoke(registry, call_id, arguments):
+async def invoke(registry, call_id, arguments, context=None, *, name="github"):
     """Preserve per-item batch validation and structured backend failures."""
     try:
-        value = await registry.call("github", call_id, arguments)
+        value = await registry.call(name, call_id, arguments)
     except (ValidationError, ValueError) as error:
         value = {"error": input_error(error)}
     items = value.get("results", [])
@@ -61,14 +61,15 @@ async def invoke(registry, call_id, arguments):
     return {"value": value, "failed": failed}
 
 
-async def dispatch(reader, send, registry):
+async def dispatch(reader, send, registry, invoke_call=invoke):
     """Multiplex calls; EOF cancels and drains all work before releasing resources."""
     tasks = {}
 
     async def call(message):
         identity = message["id"]
         try:
-            reply = await invoke(registry, message.get("call_id", identity), message.get("arguments"))
+            reply = await invoke_call(registry, message.get("call_id", identity), message.get("arguments"),
+                                      message.get("context", {}))
         except asyncio.CancelledError:
             reply = {"cancelled": True}
         except Exception as error:
@@ -111,7 +112,7 @@ async def dispatch(reader, send, registry):
         await asyncio.gather(*pending, return_exceptions=True)
 
 
-async def serve(backend, token, concurrency=8, http_timeout=60.0):
+async def serve_calls(backend, registry, invoke_call=invoke):
     loop = asyncio.get_running_loop()
     # dsh terminates managed workers with TERM before its forced-kill grace.
     # Convert TERM into structured cancellation so caches and HTTP clients close.
@@ -130,15 +131,19 @@ async def serve(backend, token, concurrency=8, http_timeout=60.0):
         sys.stdout.flush()
 
     try:
-        with TemporaryDirectory(prefix="dsh-ascend-github-") as directory:
-            async with httpx.AsyncClient(timeout=http_timeout, follow_redirects=False) as client:
-                provider = BACKENDS[backend](client, ToolStorage(Path(directory)),
-                                            token=token, concurrency=concurrency)
-                send({"ready": True, "backend": backend})
-                await dispatch(reader, send, ToolRegistry((provider, "github")))
+        send({"ready": True, "backend": backend})
+        await dispatch(reader, send, registry, invoke_call)
     finally:
         transport.close()
         loop.remove_signal_handler(signal.SIGTERM)
+
+
+async def serve(backend, token, concurrency=8, http_timeout=60.0):
+    with TemporaryDirectory(prefix="dsh-ascend-github-") as directory:
+        async with httpx.AsyncClient(timeout=http_timeout, follow_redirects=False) as client:
+            provider = BACKENDS[backend](client, ToolStorage(Path(directory)),
+                                        token=token, concurrency=concurrency)
+            await serve_calls(backend, ToolRegistry((provider, "github")))
 
 
 def main():

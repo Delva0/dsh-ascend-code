@@ -156,7 +156,7 @@ def request_headers(request: dict) -> dict:
     headers = {
         "accept": "application/vnd.github+json",
         "x-github-api-version": API_VERSION,
-        "user-agent": "dsh-ascend",
+        "user-agent": "Graphub-v5/1.0",
     }
     # These affect credentials, routing, framing, or the read-only HTTP method, rather than REST options.
     reserved = {
@@ -430,8 +430,7 @@ class GitHubAPI(APIReads):
                         if len(redirects) >= 5:
                             raise ValueError("Too many GitHub redirects")
                     elif target.scheme in {"http", "https"} and not target.userinfo:
-                        metadata.update(redirect_url=str(target),
-                                        note="Download this temporary URL with an external HTTP client.")
+                        metadata.update(redirect_url=str(target), note="Download this temporary URL with web_fetch.")
                     else:
                         raise ValueError("Invalid external redirect URL")
                 except (ValueError, httpx.InvalidURL) as exc:

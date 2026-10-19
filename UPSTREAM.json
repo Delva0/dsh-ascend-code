@@ -37,67 +37,73 @@
     },
     {
       "path": "src/ascend_github/core/registry.py",
-      "source": "src/github_mcp/registry.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/registry.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "0df0b0b7d5157455746bcd35b14fc9400712d249d2368bfb38d173d1420655c8"
     },
     {
       "path": "src/ascend_github/core/storage.py",
-      "source": "src/github_mcp/storage.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/storage.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "9b9d5bf15212f648a0ca8a0ff62f67c74acf2b7b31ff770cd7647b2da3b4f8ec"
     },
     {
       "path": "src/ascend_github/core/utils.py",
-      "source": "src/github_mcp/utils.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/utils.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "328f66d85a90ec746a22cca3a61df0acb68618f6b553eb0bb57860f40de902f7"
     },
     {
       "path": "src/ascend_github/core/githost_api_utils.py",
-      "source": "src/github_mcp/githost_api_utils.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/githost_api_utils.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "2797a85ed5d9aeb7c6ccde3ffd3d684576c56a9be2f97ff33077ed71e9f96275"
     },
     {
       "path": "src/ascend_github/core/githost_dsl.py",
-      "source": "src/github_mcp/githost_dsl.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/githost_dsl.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "d2f1f3fb575d7532efa5a64ce822c7b76f7003e159a868dd91afb487d8fd48f5"
     },
     {
       "path": "src/ascend_github/core/github_api.py",
-      "source": "src/github_mcp/github_api.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
-      "sha256": "c4bcbb9c1a6189e8eb9a4c5aa3b720fa33e81124832eada5b1aa71aa58d0f30a",
-      "changes": "Use dsh-ascend as the HTTP User-Agent."
+      "source": "gh_puller/tools/github_api.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
+      "sha256": "e2105d4584921cf55d51ba56e92673591629296a9f31526caee551d9ae94f17d"
     },
     {
       "path": "src/ascend_github/core/tool_github.py",
-      "source": "src/github_mcp/tool_github.py",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
-      "sha256": "a59640d321817d54efdbe4f84142626400afc5204ff7d00538a141446ccefb86"
+      "source": "gh_puller/tools/tool_github.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
+      "sha256": "e1f6e35f7b24034d18ee8eaa3a58211c23737f2bc4adaf18df720852f628fc2c"
     },
     {
       "path": "src/ascend_github/core/github_schema.graphql",
-      "source": "src/github_mcp/github_schema.graphql",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/github_schema.graphql",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "8ecdb21a5c3affdeaa0e55bd9174536aa6c69cbb61f20ec796085aa1509c95df"
     },
     {
       "path": "src/ascend_github/core/github_schema.meta.json",
-      "source": "src/github_mcp/github_schema.meta.json",
-      "repository": "https://github.com/Delva0/github-mcp",
-      "commit": "cdf246af1f77cc5e4a6e17bcaedbdb2224e82b24",
+      "source": "gh_puller/tools/github_schema.meta.json",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
       "sha256": "93bceb5da0fde6060fd87065e416ecac3f473b513ad22d301f5ff18dd72cf32f"
+    },
+    {
+      "path": "src/ascend_github/core/tool_web.py",
+      "source": "gh_puller/tools/tool_web.py",
+      "repository": "gh-puller",
+      "commit": "c891809229c2b02dfc739cf77175746daba9d379",
+      "sha256": "111047455f0bdfd5a1fa25609740332f5f53b4ffb6049f26341528521a04fa1f"
     }
   ]
 }

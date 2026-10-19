@@ -1,0 +1,80 @@
+{
+  "name": "web_fetch",
+  "description": "Fetch HTTP(S) URLs and follow redirects. Converts HTML to Markdown while retaining image and attachment links; reads text, JSON, PDF text, ZIP/TAR archives and gzip/bzip2/xz files. Does not execute JavaScript. Archives return a file listing: use ref plus member to read a file. Use ref with start_line=next_line to continue downloaded text without another HTTP request; url always fetches anew. Images are supplied as native image input when the model supports it, otherwise only image metadata is returned. Other binary files are saved with metadata. Downloads are limited to 50 MiB, individual archive files to 20 MiB; limits are explicit.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "requests": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "description": "HTTP(S) resource URL."
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Returned reference to an already downloaded resource; use instead of url."
+            },
+            "member": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Exact file name from an archive listing."
+            },
+            "start_line": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 400,
+              "default": 180
+            },
+            "find": {
+              "type": "string",
+              "description": "Find literal text in this resource or archive member."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "url"
+              ]
+            },
+            {
+              "required": [
+                "ref"
+              ]
+            }
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "requests"
+    ],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": [
+      "results"
+    ]
+  }
+}

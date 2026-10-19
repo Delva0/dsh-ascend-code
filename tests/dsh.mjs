@@ -22,6 +22,8 @@ writeFileSync(base, JSON.stringify([
   {id: 'prompt', name: '@deepseek-ai/dsh-system-prompt'},
   {id: 'tools', name: '@deepseek-ai/dsh-tools'},
   {id: 'subprocess', name: '@deepseek-ai/dsh-subprocess-local'},
+  {id: 'attachments', name: '@deepseek-ai/dsh-attachment-local', config: {dshHome: fixture}},
+  {id: 'llm', name: '@deepseek-ai/dsh-llm'},
   {id: 'projection', name: '@deepseek-ai/dsh-session-projection'},
   {id: 'registry', name: '@deepseek-ai/dsh-agent-preset-registry', config: {default: 'standard'}},
   {id: 'host', name: mock},
@@ -47,11 +49,11 @@ try {
   await ctx.agentPresets.recompose(agent.ctx, 'ascend');
   const prompt = renderPrompt(await ctx.systemPrompt.assemble({scope: agent}));
   console.log('Prepared Ascend workspace and assembled its prompt');
-  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github']);
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github', 'web_fetch']);
   ctx.tools.register({name: 'late_host_tool', description: 'Must stay on the host preset',
     parameters: {type: 'object', properties: {}}, output: {schema: {}, render: () => []},
     execute: async () => ({host: true})});
-  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github']);
+  assert.deepEqual(ctx.tools.schemas(agent).map(t => t.name).sort(), ['bash', 'github', 'web_fetch']);
   assert.equal((await call('late_host_tool', {})).isError, true);
   assert.equal(ctx.tools.get('bash', agent).description, readFileSync('prompts/bash.md', 'utf8'));
   assert.equal(ctx.tools.get('bash').description, 'Host fixture');
@@ -76,6 +78,14 @@ try {
   assert(!('structuredContent' in github), 'Native tool must return its canonical backend value');
   assert.equal(ctx.tools.get('github', agent).presentCall(githubArgs).kind, 'fetch');
   assert.equal((await call('github', {})).isError, true);
+  const fetched = value(await call('web_fetch', {requests: [{
+    url: 'https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/README.md', max_lines: 3,
+  }]})).results[0];
+  assert.equal(fetched.status, 200);
+  const continued = value(await call('web_fetch', {requests: [{ref: fetched.ref,
+    start_line: fetched.next_line, max_lines: 3}]})).results[0];
+  assert.equal(continued.ref, fetched.ref);
+  assert.equal(continued.start_line, fetched.next_line);
   if (backend === 'rest') {
     const saved = {requests: [{result_id: github.results[0].result_id, fields: {name: '/full_name'}}]};
     assert.equal(value(await call('github', saved)).results[0].data.name, 'vllm-project/vllm-ascend');
@@ -114,7 +124,8 @@ try {
   await ctx.agentPresets.recompose(agent.ctx, 'standard');
   assert.equal(value(await call('bash', {})).content, 'host');
   assert(!ctx.tools.schemas(agent).some(t => t.name === 'github'));
-  console.log(`PASS: native bash/GitHub (${backend}), prompt, preset isolation/switch, real Docker/lsp, background notification, cancellation`);
+  assert(!ctx.tools.schemas(agent).some(t => t.name === 'web_fetch'));
+  console.log(`PASS: native bash/GitHub (${backend})/web_fetch, prompt, preset isolation/switch, real Docker/lsp, background notification, cancellation`);
 } finally {
   await scope.dispose();
   await ctx.fiber.dispose();
