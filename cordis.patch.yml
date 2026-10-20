@@ -8,7 +8,7 @@
         order: 20
         plugins:
           - id: ascend
-            name: '@delva/dsh-ascend'
+            name: dsh-ascend-code
             config:
               workdir: /workspace
               maxOutputBytes: 100000

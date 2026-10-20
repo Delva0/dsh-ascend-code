@@ -8,11 +8,10 @@ from contextlib import suppress
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import httpx
-
 from .core.registry import ToolRegistry, installed_specs
 from .core.storage import ToolStorage
 from .core.tool_web import DEFAULT_SEARCH_INTERVAL, SEARCH_BACKENDS, WebTools
+from .http_client import http_client
 from .worker import invoke, serve_calls
 
 
@@ -81,7 +80,7 @@ async def serve(backend="web_fetch"):
     with TemporaryDirectory(prefix="dsh-ascend-web-") as directory:
         # Each tool has its own worker/client. Only the search worker receives
         # Brave credentials; the original provider scopes its auth header to Brave.
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
+        async with http_client(timeout=60.0) as client:
             storage = ToolStorage(Path(directory))
             session = (SearchSession(client, storage, **search_options()) if backend == "web_search"
                        else FetchSession(client, storage))

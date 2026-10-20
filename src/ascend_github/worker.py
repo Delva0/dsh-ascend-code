@@ -16,12 +16,12 @@ from contextlib import suppress
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import httpx
 from jsonschema import ValidationError
 
 from .core.registry import ToolRegistry, input_error, installed_specs
 from .core.storage import ToolStorage
 from .core.tool_github import GitHubDSLTool, GitHubGraphQLTool, GitHubRESTTool
+from .http_client import http_client
 
 BACKENDS = {"rest": GitHubRESTTool, "graphql": GitHubGraphQLTool, "dsl": GitHubDSLTool}
 MAX_FRAME_BYTES = 8 * 1024 * 1024
@@ -140,7 +140,7 @@ async def serve_calls(backend, registry, invoke_call=invoke):
 
 async def serve(backend, token, concurrency=8, http_timeout=60.0):
     with TemporaryDirectory(prefix="dsh-ascend-github-") as directory:
-        async with httpx.AsyncClient(timeout=http_timeout, follow_redirects=False) as client:
+        async with http_client(timeout=http_timeout) as client:
             provider = BACKENDS[backend](client, ToolStorage(Path(directory)),
                                         token=token, concurrency=concurrency)
             await serve_calls(backend, ToolRegistry((provider, "github")))

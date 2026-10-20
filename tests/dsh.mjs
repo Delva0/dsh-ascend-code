@@ -7,11 +7,12 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {boot, loadOverlayPatches} from '@deepseek-ai/dsh-app-boot';
 import {createScope} from '@deepseek-ai/dsh-scope';
 import {renderPrompt} from '@deepseek-ai/dsh-system-prompt';
+import {installProxyFromEnvironment} from '@deepseek-ai/dsh-http-proxy';
 
 mkdirSync('build', {recursive: true});
 const fixture = mkdtempSync(resolve('build/dsh-test-'));
-mkdirSync(join(fixture, 'node_modules/@delva'), {recursive: true});
-symlinkSync(process.env.DSH_ASCEND_PLUGIN_ROOT || resolve('.'), join(fixture, 'node_modules/@delva/dsh-ascend'), 'dir');
+mkdirSync(join(fixture, 'node_modules'), {recursive: true});
+symlinkSync(process.env.DSH_ASCEND_PLUGIN_ROOT || resolve('.'), join(fixture, 'node_modules/dsh-ascend-code'), 'dir');
 const mock = join(fixture, 'host.mjs');
 writeFileSync(mock, `export const inject = ['tools']; export function apply(ctx) {
  ctx.tools.register({name:'bash',description:'Host fixture',parameters:{type:'object',properties:{}},
@@ -29,6 +30,12 @@ writeFileSync(base, JSON.stringify([
   {id: 'host', name: mock},
   {id: 'standard', name: '@deepseek-ai/dsh-agent-preset', config: {id: 'standard', plugins: []}},
 ]));
+// boot() alone skips the CLI launcher's proxy installation. Exercise the same
+// inherited environment as the actual Web app, including bracketed IPv6 bypass.
+const restoreProxy = await installProxyFromEnvironment({get(name) {
+  const value = process.env[name];
+  return value === undefined ? undefined : {value};
+}}, message => console.warn(message));
 const ctx = await boot('ascend-test', base, loadOverlayPatches('ascend-test', resolve('cordis.patch.yml')));
 const notices = [];
 const agent = {id: randomUUID(), steer(message) { notices.push(message); }};
@@ -101,6 +108,14 @@ try {
     console.log(`PASS: live native web_search (${searched.backend}) returned ${searched.returned_count} results`);
   }
   if (backend === 'rest') {
+    const issues = value(await call('github', {requests: [{
+      path: '/search/issues',
+      params: {q: 'repo:vllm-project/vllm-ascend v0.30 bug', sort: 'created', order: 'desc', per_page: 20},
+      fields: {n: '/number', t: '/title', s: '/state', c: '/created_at', u: '/html_url'},
+    }]})).results[0];
+    assert.equal(issues.status, 200, JSON.stringify(issues));
+    assert(!issues.error);
+    console.log('PASS: reported GitHub issue-search request with the real dsh proxy policy');
     const saved = {requests: [{result_id: github.results[0].result_id, fields: {name: '/full_name'}}]};
     assert.equal(value(await call('github', saved)).results[0].data.name, 'vllm-project/vllm-ascend');
     const partial = value(await call('github', {requests: [17, ...saved.requests]}));
@@ -144,5 +159,6 @@ try {
 } finally {
   await scope.dispose();
   await ctx.fiber.dispose();
+  await restoreProxy();
   rmSync(fixture, {recursive: true, force: true});
 }

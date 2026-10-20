@@ -40,10 +40,10 @@ writeFileSync(join(settingsDir, 'workspace.json'), JSON.stringify({container: sa
 if (!args.includes('--skip-plugin')) {
   mkdirSync(join(root, 'build'), {recursive: true});
   run(['npm', 'pack', '--pack-destination', 'build']);
-  const content = readFileSync(resolve(root, `build/delva-dsh-ascend-${version}.tgz`));
+  const content = readFileSync(resolve(root, `build/dsh-ascend-code-${version}.tgz`));
   const digest = createHash('sha256').update(content).digest('hex').slice(0, 12);
   // pnpm caches a local tarball by its path; each development build needs its own path.
-  const archive = resolve(root, `build/delva-dsh-ascend-${version}-${digest}.tgz`);
+  const archive = resolve(root, `build/dsh-ascend-code-${version}-${digest}.tgz`);
   writeFileSync(archive, content);
   run(['dsh', 'plugin', '--profile', profile, 'add', archive]);
 }

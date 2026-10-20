@@ -14,7 +14,7 @@ import {ensureWorkspace} from './provision.mjs';
 import {registerGitHub} from './github.mjs';
 import {registerWebFetch, registerWebSearch} from './web.mjs';
 
-export const name = 'dsh-ascend';
+export const name = 'dsh-ascend-code';
 export const inject = ['tools', 'systemPrompt', 'subprocess', 'attachments', 'llm'];
 export const Config = z.object({
   container: z.string(),

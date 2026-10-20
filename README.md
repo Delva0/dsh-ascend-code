@@ -1,4 +1,4 @@
-# dsh-ascend
+# dsh-ascend-code
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加独立的 **vLLM Ascend** agent 预设。选择预设后，模型的 `bash` 工具直接在准备好的 Docker 容器中执行。无需修改 dsh 源码。
 
@@ -17,13 +17,14 @@
 
 ```bash
 npm install --global pnpm @deepseek-ai/dsh@0.2.1-rc.2
-gh auth login
 mkdir -p ~/.cache/dsh-ascend
-gh release download v0.4.0 --repo Delva0/dsh-ascend \
-  --pattern delva-dsh-ascend-0.4.0.tgz --dir ~/.cache/dsh-ascend --clobber
-dsh plugin --profile web add "$HOME/.cache/dsh-ascend/delva-dsh-ascend-0.4.0.tgz"
+curl -fL https://github.com/Delva0/dsh-ascend-code/releases/download/v0.4.1/dsh-ascend-code-0.4.1.tgz \
+  -o ~/.cache/dsh-ascend/dsh-ascend-code-0.4.1.tgz
+dsh plugin --profile web add "$HOME/.cache/dsh-ascend/dsh-ascend-code-0.4.1.tgz"
 dsh web
 ```
+
+公开仓库及 release 下载无需 GitHub 登录。若此前装过旧包，先执行 `dsh plugin --profile web remove @delva/dsh-ascend`，再安装新包并重启 dsh；现有容器、仓库和持久卷会继续复用。
 
 也可在 dsh 的 Plugins 页面安装下载的 `.tgz`，然后启用这个 bundle。插件包自带容器构建文件、GitHub / Web Python 核心及锁定的依赖，不依赖其他私仓或开发者 checkout。默认搜索使用 Brave，首次搜索前按下文配置 Brave key；也可选择无需 key 的 DuckDuckGo。
 
@@ -45,7 +46,7 @@ dsh web
 开发时可从源码安装；`setup` 只是提前准备环境和安装本地包的可选入口：
 
 ```bash
-gh repo clone Delva0/dsh-ascend ~/projects/dsh-ascend
+git clone https://github.com/Delva0/dsh-ascend-code.git ~/projects/dsh-ascend
 cd ~/projects/dsh-ascend
 npm run setup
 ```
@@ -55,7 +56,7 @@ npm run setup
 ```bash
 mkdir -p build
 npm pack --pack-destination build
-dsh plugin --profile web add "$PWD/build/delva-dsh-ascend-0.4.0.tgz"
+dsh plugin --profile web add "$PWD/build/dsh-ascend-code-0.4.1.tgz"
 ```
 
 只提前准备、不安装插件可用 `npm run setup -- --skip-plugin`。源码 setup 会将连接信息写入 `${DSH_HOME:-~/.dsh}/ascend/workspace.json`；仅包含容器、镜像和 volume，没有 token 或固定的自动生成运行环境路径。运行时数据放在 dsh 数据目录和 Docker volume，安装后无需保留源码 checkout。
@@ -88,6 +89,8 @@ DSH_ASCEND_GITHUB_PYTHON=/absolute/path/to/venv/bin/python dsh web
 插件通过 dsh 的 subprocess provider 显式向 GitHub worker 转发 `GH_TOKEN`、`GITHUB_TOKEN`、`GITHUB_PERSONAL_ACCESS_TOKEN`；未设置时复用 `gh auth login`。这些凭据不传入 Web workers 或容器。容器不挂载宿主 home、Docker socket 或项目目录。
 
 `githubPython` / `DSH_ASCEND_GITHUB_PYTHON` 是可选的开发覆盖项，指定的 Python 必须已安装本项目及 `github` extra；普通安装会自动准备。后端配置使用 `githubBackend` 或 `DSH_ASCEND_GITHUB_BACKEND`，不再读取旧版本的 GitHub 配置环境变量。
+
+GitHub 和 Web worker 沿用 dsh 转发的代理环境。v0.4.1 修复了 dsh 自动加入 `NO_PROXY=[::1]` 时 HTTPX 初始化报 `Invalid port: ':1]'` 的兼容问题：仅在创建 HTTP client 时转换 IPv6 绕过条目的写法，保留代理、认证、绕过端口、大小写优先级及 CA 配置，随后立即恢复 worker 环境。无需修改系统代理设置；从旧版升级后重启 dsh，让会话加载新插件和对应的 Python runtime。
 
 ## 原生 GitHub 工具
 
@@ -140,7 +143,7 @@ DSH_ASCEND_WEB_SEARCH_CONCURRENCY=1 DSH_ASCEND_WEB_SEARCH_INTERVAL=2 dsh web
 
 GitHub 三后端、web_search、web_fetch 及共享 Python 核心逐字来自 `gh-puller@c891809229c2b02dfc739cf77175746daba9d379`，保留原始 HTTP User-Agent、工具描述和错误/恢复提示。两份系统/Bash 提示词逐字来自 `graphub@4864bff12ef8a4dc62b419f77cf0d2abafdb579f`；仅在装配时替换原有占位符。
 
-[UPSTREAM.json](UPSTREAM.json) 逐文件记录来源 commit 和 SHA-256。测试校验每个导入文件的字节摘要，以及导出的工具描述和参数是否与 Python 原定义一致。dsh 适配仅位于 `plugin/` 和 Python worker 入口；后续升级原工具时应整体更新明确的来源版本及校验记录，不能为适配插件而改写原提示词。
+[UPSTREAM.json](UPSTREAM.json) 逐文件记录来源 commit 和 SHA-256。测试校验每个导入文件的字节摘要，以及导出的工具描述和参数是否与 Python 原定义一致。dsh 适配仅位于 `plugin/` 和 Python worker 适配层；后续升级原工具时应整体更新明确的来源版本及校验记录，不能为适配插件而改写原提示词。
 
 ## Bash 与任务生命周期
 
@@ -161,7 +164,7 @@ docker exec -i dsh-ascend-workspace /opt/ascend/.venv/bin/python -m ascend_works
 JSON
 ```
 
-工作目录在持久卷中。停止/启动容器不会清空仓库；插件连接时会启动已停止的本插件容器。删除容器前应先停止后台工作，保留 volume 即保留代码。卸载插件使用 `dsh plugin --profile web remove @delva/dsh-ascend`，不会删除卷。
+工作目录在持久卷中。停止/启动容器不会清空仓库；插件连接时会启动已停止的本插件容器。删除容器前应先停止后台工作，保留 volume 即保留代码。卸载插件使用 `dsh plugin --profile web remove dsh-ascend-code`，不会删除卷。
 
 ## 开发与验证
 
